@@ -1,0 +1,27 @@
+{
+  "name": "童话织梦机",
+  "short_name": "童话织梦机",
+  "description": "为孩子编织专属的奇妙童话故事",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fdf6ec",
+  "theme_color": "#f5e6c8",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "kids", "entertainment"]
+}

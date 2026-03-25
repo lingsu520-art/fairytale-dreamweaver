@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>童话织梦机 — 为孩子编织专属童话</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f5e6c8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="童话织梦机">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- Floating decorative elements -->
+<div class="floating-decor star s1">✦</div>
+<div class="floating-decor star s2">⭒</div>
+<div class="floating-decor star s3">✧</div>
+<div class="floating-decor moon">☽</div>
+<div class="floating-decor star s4">✦</div>
+<div class="floating-decor star s5">⭒</div>
+
+<!-- Header -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-icon">📖</span>
+      <h1>童话织梦机</h1>
+      <span class="logo-sub">为孩子编织专属的奇妙故事</span>
+    </div>
+  </div>
+</header>
+
+<!-- Main Layout -->
+<main class="app-layout">
+  <!-- LEFT: Story Directory -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-icon">🗂️</span>
+      <h2>故事目录</h2>
+    </div>
+    <div class="sidebar-list" id="storyList">
+      <div class="sidebar-empty" id="sidebarEmpty">
+        <span class="empty-icon">🌙</span>
+        <p>还没有保存的故事</p>
+        <p class="empty-hint">生成并保留故事后<br>会出现在这里</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER: Input Area -->
+  <section class="center-panel">
+    <div class="input-section">
+      <div class="section-label">
+        <span>🪶</span> 语料输入
+      </div>
+      <textarea id="userInput" placeholder="在这里描述你想要的故事元素……&#10;&#10;例如：一只勇敢的小兔子，住在森林深处的蘑菇屋里，它想要寻找传说中的彩虹花园……"></textarea>
+    </div>
+
+    <div class="style-section">
+      <div class="section-label">
+        <span>🎨</span> 童话风格选择
+      </div>
+      <div class="style-grid" id="styleGrid">
+        <button class="style-card selected" data-style="andersen">
+          <div class="style-card-icon">🧜‍♀️</div>
+          <div class="style-card-name">安徒生童话</div>
+          <div class="style-card-desc">浪漫唯美，触动心灵</div>
+          <div class="style-card-glow"></div>
+        </button>
+        <button class="style-card" data-style="grimm">
+          <div class="style-card-icon">🏰</div>
+          <div class="style-card-name">格林童话</div>
+          <div class="style-card-desc">奇幻冒险，善恶分明</div>
+          <div class="style-card-glow"></div>
+        </button>
+        <button class="style-card" data-style="aesop">
+          <div class="style-card-icon">🦊</div>
+          <div class="style-card-name">伊索寓言</div>
+          <div class="style-card-desc">寓教于乐，智慧哲理</div>
+          <div class="style-card-glow"></div>
+        </button>
+        <button class="style-card" data-style="eastern">
+          <div class="style-card-icon">🐉</div>
+          <div class="style-card-name">东方神话</div>
+          <div class="style-card-desc">神韵悠远，瑰丽奇幻</div>
+          <div class="style-card-glow"></div>
+        </button>
+      </div>
+    </div>
+
+    <button class="generate-btn" id="generateBtn">
+      <span class="btn-icon">✨</span>
+      <span class="btn-text">开始织梦</span>
+      <span class="btn-loading" style="display:none;">
+        <span class="spinner"></span> 故事编织中…
+      </span>
+    </button>
+
+    <div class="user-bar" id="userBar">
+      <span class="user-avatar" id="userAvatar">👤</span>
+      <span class="user-name" id="userNameDisplay">未登录</span>
+      <button class="user-switch-btn" id="userSwitchBtn">切换用户</button>
+    </div>
+  </section>
+
+  <!-- RIGHT: Story Display -->
+  <section class="reader-panel">
+    <div class="reader-header">
+      <span>📜</span>
+      <h2>故事浏览</h2>
+    </div>
+    <div class="reader-content" id="readerContent">
+      <div class="reader-placeholder" id="readerPlaceholder">
+        <div class="placeholder-book">📚</div>
+        <p>输入你的创意灵感</p>
+        <p>选择一种童话风格</p>
+        <p>点击「开始织梦」</p>
+        <p class="placeholder-hint">一个专属的童话故事即将诞生……</p>
+      </div>
+      <div class="story-text" id="storyText" style="display:none;"></div>
+    </div>
+    <div class="reader-actions" id="readerActions" style="display:none;">
+      <button class="action-btn keep-btn" id="keepBtn">
+        <span>💾</span> 保留故事
+      </button>
+      <button class="action-btn discard-btn" id="discardBtn">
+        <span>🗑️</span> 放弃
+      </button>
+    </div>
+  </section>
+</main>
+
+<!-- Mobile Tab Bar -->
+<nav class="mobile-tabs" id="mobileTabs">
+  <button class="mobile-tab active" data-tab="center">
+    <span class="mobile-tab-icon">✏️</span>
+    <span class="mobile-tab-label">创作</span>
+  </button>
+  <button class="mobile-tab" data-tab="reader">
+    <span class="mobile-tab-icon">📜</span>
+    <span class="mobile-tab-label">阅读</span>
+  </button>
+  <button class="mobile-tab" data-tab="sidebar">
+    <span class="mobile-tab-icon">🗂️</span>
+    <span class="mobile-tab-label">目录</span>
+  </button>
+</nav>
+
+<!-- User Login/Register Modal -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>👋 欢迎来到童话织梦机</h3>
+      <button class="modal-close" id="modalCloseBtn" style="display:none;">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">请输入你的名字，每位家长都有独立的故事空间</p>
+      <label class="modal-label">
+        <span>用户名</span>
+        <input type="text" id="usernameInput" placeholder="例如：小明妈妈" maxlength="20" />
+      </label>
+      <div class="user-list-section" id="existingUsersSection" style="display:none;">
+        <span class="modal-label-text">或选择已有用户</span>
+        <div class="existing-users" id="existingUsersList"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-save-btn" id="modalLoginBtn">进入故事世界</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
