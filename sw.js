@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fairytale-v1';
+const CACHE_NAME = 'fairytale-v2';
 const STATIC_ASSETS = [
   './',
   './index.html',

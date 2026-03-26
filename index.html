@@ -18,6 +18,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <!-- Floating decorative elements -->
@@ -108,7 +112,7 @@
     <div class="user-bar" id="userBar">
       <span class="user-avatar" id="userAvatar">👤</span>
       <span class="user-name" id="userNameDisplay">未登录</span>
-      <button class="user-switch-btn" id="userSwitchBtn">切换用户</button>
+      <button class="user-switch-btn" id="userLogoutBtn">退出登录</button>
     </div>
   </section>
 
@@ -159,22 +163,27 @@
 <div class="modal-overlay" id="userModal">
   <div class="modal">
     <div class="modal-header">
-      <h3>👋 欢迎来到童话织梦机</h3>
+      <h3 id="modalTitle">👋 欢迎回来</h3>
       <button class="modal-close" id="modalCloseBtn" style="display:none;">&times;</button>
     </div>
     <div class="modal-body">
-      <p class="modal-desc">请输入你的名字，每位家长都有独立的故事空间</p>
+      <p class="modal-desc" id="modalDesc">登录你的账号，继续你的童话之旅</p>
+      <div class="auth-error" id="authError" style="display:none;"></div>
       <label class="modal-label">
         <span>用户名</span>
-        <input type="text" id="usernameInput" placeholder="例如：小明妈妈" maxlength="20" />
+        <input type="text" id="usernameInput" placeholder="例如：小明妈妈" maxlength="20" autocomplete="username" />
       </label>
-      <div class="user-list-section" id="existingUsersSection" style="display:none;">
-        <span class="modal-label-text">或选择已有用户</span>
-        <div class="existing-users" id="existingUsersList"></div>
-      </div>
+      <label class="modal-label">
+        <span>密码</span>
+        <input type="password" id="passwordInput" placeholder="请输入密码（至少6位）" maxlength="40" autocomplete="current-password" />
+      </label>
     </div>
     <div class="modal-footer">
-      <button class="modal-save-btn" id="modalLoginBtn">进入故事世界</button>
+      <button class="modal-save-btn" id="modalLoginBtn">登录</button>
+      <div class="auth-toggle">
+        <span id="authToggleText">还没有账号？</span>
+        <button class="auth-toggle-btn" id="authToggleBtn">点击注册</button>
+      </div>
     </div>
   </div>
 </div>

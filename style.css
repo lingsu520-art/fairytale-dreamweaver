@@ -419,43 +419,40 @@ body::before {
   line-height: 1.6;
   margin-bottom: 0.3rem;
 }
-.modal-label-text {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 700;
-  display: block;
-  margin-bottom: 0.4rem;
+
+/* Auth error */
+.auth-error {
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: rgba(196, 80, 80, 0.1);
+  border: 1px solid rgba(196, 80, 80, 0.25);
+  color: #a03030;
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 
-/* Existing users list */
-.user-list-section { margin-top: 0.3rem; }
-.existing-users {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+/* Auth toggle (login/register switch) */
+.auth-toggle {
+  text-align: center;
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
-.existing-user-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.4rem 0.75rem;
-  border: 1.5px solid var(--border-light);
-  border-radius: 20px;
-  background: rgba(255,255,255,0.6);
+.auth-toggle-btn {
+  border: none;
+  background: none;
+  color: var(--purple);
   font-family: inherit;
   font-size: 0.85rem;
-  color: var(--text-secondary);
+  font-weight: 700;
   cursor: pointer;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
   transition: all 0.2s;
 }
-.existing-user-chip:hover {
-  border-color: var(--gold-soft);
-  background: rgba(232, 200, 122, 0.15);
-}
-.existing-user-chip .chip-icon { font-size: 0.9rem; }
-.existing-user-chip .chip-count {
-  font-size: 0.7rem;
-  color: var(--text-muted);
+.auth-toggle-btn:hover {
+  color: var(--purple-deep);
+  background: rgba(168, 124, 196, 0.1);
 }
 /* Reader Panel */
 .reader-panel {
@@ -677,6 +674,11 @@ body::before {
 .modal-save-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 5px 18px rgba(184,145,46,0.35);
+}
+.modal-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* Toast notification */

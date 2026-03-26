@@ -1,8 +1,22 @@
 /* ============================================
-   童话织梦机 — Application Logic
+   童话织梦机 — Application Logic (Firebase)
    ============================================ */
 
-// --- Embedded API Config ---
+// --- Firebase Config ---
+const firebaseConfig = {
+  apiKey: "AIzaSyC3bTo1_POWXXBjXGobDdRIEPeGQZtUNrk",
+  authDomain: "fairytale-dreamweaver.firebaseapp.com",
+  projectId: "fairytale-dreamweaver",
+  storageBucket: "fairytale-dreamweaver.firebasestorage.app",
+  messagingSenderId: "1094672552918",
+  appId: "1:1094672552918:web:474581d1215cc5a7d68a77"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// --- Qwen API Config ---
 const API_CONFIG = {
   apiKey: 'sk-3e431fec7e3c49eeb6efb4f4390ca994',
   apiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -14,7 +28,9 @@ let selectedStyle = 'andersen';
 let currentStory = '';
 let isGenerating = false;
 let abortController = null;
-let currentUser = null; // { name: string }
+let currentUser = null;
+let currentUsername = '';
+let authMode = 'login';
 
 // --- Style prompts ---
 const STYLE_PROMPTS = {
@@ -24,12 +40,7 @@ const STYLE_PROMPTS = {
   eastern: '请以东方神话故事的风格写作。融入中国传统文化元素，如仙人、神兽、法宝、山川河流等意象。语言优雅古朴，带有诗词韵味，展现东方美学和传统价值观。'
 };
 
-const STYLE_ICONS = {
-  andersen: '🧜‍♀️',
-  grimm: '🏰',
-  aesop: '🦊',
-  eastern: '🐉'
-};
+const STYLE_ICONS = { andersen: '🧜‍♀️', grimm: '🏰', aesop: '🦊', eastern: '🐉' };
 
 // --- Init ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -37,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initEventListeners();
   initMobileTabs();
   registerServiceWorker();
-  initUser();
+  initAuth();
 });
 
 // --- PWA Service Worker ---
@@ -57,13 +68,12 @@ function initEventListeners() {
   document.getElementById('keepBtn').addEventListener('click', keepStory);
   document.getElementById('discardBtn').addEventListener('click', discardStory);
 
-  // User switch button
-  document.getElementById('userSwitchBtn').addEventListener('click', openUserModal);
+  // Logout button
+  document.getElementById('userLogoutBtn').addEventListener('click', logoutUser);
 
-  // User modal
+  // Modal
   const userModal = document.getElementById('userModal');
   function onOverlayClose(e) {
-    // Only allow close if a user is logged in
     if (e.target === userModal && currentUser) {
       e.preventDefault();
       closeUserModal();
@@ -74,109 +84,174 @@ function initEventListeners() {
 
   const modalCloseBtn = document.getElementById('modalCloseBtn');
   modalCloseBtn.addEventListener('click', closeUserModal);
-  modalCloseBtn.addEventListener('touchend', function(e) {
-    e.preventDefault();
-    closeUserModal();
-  });
+  modalCloseBtn.addEventListener('touchend', function(e) { e.preventDefault(); closeUserModal(); });
 
   const modalLoginBtn = document.getElementById('modalLoginBtn');
-  modalLoginBtn.addEventListener('click', loginUser);
-  modalLoginBtn.addEventListener('touchend', function(e) {
-    e.preventDefault();
-    loginUser();
-  });
+  modalLoginBtn.addEventListener('click', handleAuth);
+  modalLoginBtn.addEventListener('touchend', function(e) { e.preventDefault(); handleAuth(); });
 
-  // Enter key in username input
+  // Auth mode toggle
+  document.getElementById('authToggleBtn').addEventListener('click', toggleAuthMode);
+
+  // Enter key in password input
+  document.getElementById('passwordInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') handleAuth();
+  });
   document.getElementById('usernameInput').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') loginUser();
+    if (e.key === 'Enter') document.getElementById('passwordInput').focus();
   });
 }
 
 // =============================================
-// User System
+// Auth System (Firebase)
 // =============================================
-function getAllUsers() {
-  const raw = localStorage.getItem('fairytale_users');
-  if (raw) {
-    try { return JSON.parse(raw); } catch(e) {}
-  }
-  return [];
-}
-
-function saveAllUsers(users) {
-  localStorage.setItem('fairytale_users', JSON.stringify(users));
-}
-
-function initUser() {
-  const lastUser = localStorage.getItem('fairytale_current_user');
-  if (lastUser) {
-    currentUser = { name: lastUser };
-    updateUserUI();
-    loadStories();
-  } else {
-    openUserModal();
-  }
+function initAuth() {
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      currentUser = user;
+      try {
+        const doc = await db.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          currentUsername = doc.data().username || '';
+        }
+      } catch (e) {
+        console.error('Failed to load user profile:', e);
+      }
+      updateUserUI();
+      loadStories();
+      closeUserModal();
+    } else {
+      currentUser = null;
+      currentUsername = '';
+      updateUserUI();
+      clearReader();
+      clearStoryList();
+      openUserModal();
+    }
+  });
 }
 
 function openUserModal() {
   const modal = document.getElementById('userModal');
   const closeBtn = document.getElementById('modalCloseBtn');
   document.getElementById('usernameInput').value = '';
+  document.getElementById('passwordInput').value = '';
+  hideAuthError();
 
-  // Only show close button if already logged in (switching user)
   closeBtn.style.display = currentUser ? 'flex' : 'none';
 
-  // Populate existing users
-  renderExistingUsers();
+  // Reset to login mode
+  authMode = 'login';
+  updateAuthModeUI();
 
   modal.classList.add('active');
   setTimeout(() => document.getElementById('usernameInput').focus(), 300);
 }
 
 function closeUserModal() {
-  const modal = document.getElementById('userModal');
-  modal.classList.remove('active');
-  modal.offsetHeight;
+  document.getElementById('userModal').classList.remove('active');
 }
 
-let _loggingIn = false;
-function loginUser() {
-  if (_loggingIn) return;
-  _loggingIn = true;
-  setTimeout(() => { _loggingIn = false; }, 300);
-
-  const name = document.getElementById('usernameInput').value.trim();
-  if (!name) {
-    showToast('请输入用户名', 'error');
-    return;
-  }
-
-  // Register user if new
-  const users = getAllUsers();
-  if (!users.find(u => u.name === name)) {
-    users.push({ name: name, createdAt: Date.now() });
-    saveAllUsers(users);
-  }
-
-  currentUser = { name: name };
-  localStorage.setItem('fairytale_current_user', name);
-
-  closeUserModal();
-  updateUserUI();
-  clearReader();
-  loadStories();
-  showToast(`欢迎，${name}！`, 'success');
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'register' : 'login';
+  updateAuthModeUI();
+  hideAuthError();
 }
 
-function loginAsUser(name) {
-  document.getElementById('usernameInput').value = name;
-  loginUser();
+function updateAuthModeUI() {
+  const title = document.getElementById('modalTitle');
+  const desc = document.getElementById('modalDesc');
+  const btn = document.getElementById('modalLoginBtn');
+  const toggleText = document.getElementById('authToggleText');
+  const toggleBtn = document.getElementById('authToggleBtn');
+
+  if (authMode === 'login') {
+    title.textContent = '👋 欢迎回来';
+    desc.textContent = '登录你的账号，继续你的童话之旅';
+    btn.textContent = '登录';
+    toggleText.textContent = '还没有账号？';
+    toggleBtn.textContent = '点击注册';
+  } else {
+    title.textContent = '✨ 创建新账号';
+    desc.textContent = '注册一个账号，开启你的童话世界';
+    btn.textContent = '注册';
+    toggleText.textContent = '已有账号？';
+    toggleBtn.textContent = '返回登录';
+  }
+}
+
+let _authBusy = false;
+async function handleAuth() {
+  if (_authBusy) return;
+
+  const username = document.getElementById('usernameInput').value.trim();
+  const password = document.getElementById('passwordInput').value;
+
+  if (!username) { showAuthError('请输入用户名'); return; }
+  if (!password) { showAuthError('请输入密码'); return; }
+  if (password.length < 6) { showAuthError('密码至少需要6位'); return; }
+
+  // Construct email from username (encode for Firebase Auth)
+  const emailSafe = encodeURIComponent(username).replace(/%/g, '_').toLowerCase();
+  const email = emailSafe + '@fairytale-dreamweaver.app';
+
+  _authBusy = true;
+  const btn = document.getElementById('modalLoginBtn');
+  btn.disabled = true;
+  btn.textContent = authMode === 'login' ? '登录中…' : '注册中…';
+  hideAuthError();
+
+  try {
+    if (authMode === 'register') {
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      await db.collection('users').doc(cred.user.uid).set({
+        username: username,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      currentUsername = username;
+      showToast('注册成功，欢迎！', 'success');
+    } else {
+      await auth.signInWithEmailAndPassword(email, password);
+      showToast('欢迎回来！', 'success');
+    }
+  } catch (err) {
+    console.error('Auth error:', err.code, err.message);
+    const msg = getAuthErrorMessage(err.code);
+    showAuthError(msg);
+  } finally {
+    _authBusy = false;
+    btn.disabled = false;
+    btn.textContent = authMode === 'login' ? '登录' : '注册';
+  }
+}
+
+function getAuthErrorMessage(code) {
+  const map = {
+    'auth/email-already-in-use': '该用户名已被注册，请直接登录',
+    'auth/user-not-found': '用户名不存在，请先注册',
+    'auth/wrong-password': '密码错误，请重试',
+    'auth/invalid-credential': '用户名或密码错误',
+    'auth/too-many-requests': '登录尝试过多，请稍后再试',
+    'auth/weak-password': '密码强度不够，至少需要6位',
+    'auth/network-request-failed': '网络连接失败，请检查网络',
+    'auth/invalid-email': '用户名格式不正确，请使用中英文和数字'
+  };
+  return map[code] || '操作失败，请稍后重试';
+}
+
+async function logoutUser() {
+  try {
+    await auth.signOut();
+    showToast('已退出登录', 'info');
+  } catch (e) {
+    console.error('Logout error:', e);
+  }
 }
 
 function updateUserUI() {
-  if (!currentUser) return;
-  document.getElementById('userNameDisplay').textContent = currentUser.name;
-  document.getElementById('userAvatar').textContent = getAvatarEmoji(currentUser.name);
+  const name = currentUsername || '未登录';
+  document.getElementById('userNameDisplay').textContent = name;
+  document.getElementById('userAvatar').textContent = currentUser ? getAvatarEmoji(name) : '👤';
 }
 
 function getAvatarEmoji(name) {
@@ -186,57 +261,70 @@ function getAvatarEmoji(name) {
   return avatars[hash % avatars.length];
 }
 
-function renderExistingUsers() {
-  const users = getAllUsers();
-  const section = document.getElementById('existingUsersSection');
-  const list = document.getElementById('existingUsersList');
-  list.innerHTML = '';
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
 
-  if (users.length === 0) {
-    section.style.display = 'none';
-    return;
-  }
-
-  section.style.display = 'block';
-  users.forEach(u => {
-    const stories = getUserStories(u.name);
-    const chip = document.createElement('button');
-    chip.className = 'existing-user-chip';
-    chip.innerHTML = `<span class="chip-icon">${getAvatarEmoji(u.name)}</span> ${escapeHtml(u.name)} <span class="chip-count">(${stories.length}篇)</span>`;
-    chip.addEventListener('click', () => loginAsUser(u.name));
-    list.appendChild(chip);
-  });
+function hideAuthError() {
+  document.getElementById('authError').style.display = 'none';
 }
 
 // =============================================
-// Story Management (per-user isolation)
+// Story Management (Firestore)
 // =============================================
-function getStorageKey() {
-  if (!currentUser) return 'fairytale_stories_guest';
-  return 'fairytale_stories_' + currentUser.name;
+function getStoriesRef() {
+  if (!currentUser) return null;
+  return db.collection('users').doc(currentUser.uid).collection('stories');
 }
 
-function getStories() {
-  const raw = localStorage.getItem(getStorageKey());
-  if (raw) {
-    try { return JSON.parse(raw); } catch(e) {}
+async function loadStories() {
+  if (!currentUser) return;
+  const ref = getStoriesRef();
+  if (!ref) return;
+
+  try {
+    const snap = await ref.orderBy('timestamp', 'desc').get();
+    const list = document.getElementById('storyList');
+    const empty = document.getElementById('sidebarEmpty');
+
+    list.querySelectorAll('.story-item').forEach(el => el.remove());
+
+    if (snap.empty) {
+      empty.style.display = 'block';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    snap.forEach(doc => {
+      const story = { id: doc.id, ...doc.data() };
+      const el = document.createElement('div');
+      el.className = 'story-item';
+      el.dataset.id = story.id;
+      el.innerHTML = `
+        <span class="story-item-icon">${STYLE_ICONS[story.style] || '📖'}</span>
+        <div class="story-item-body">
+          <div class="story-item-title">${escapeHtml(story.title)}</div>
+          <div class="story-item-meta">${story.date || ''}</div>
+        </div>
+        <button class="story-item-delete" title="删除">×</button>
+      `;
+      el.querySelector('.story-item-delete').addEventListener('click', function(e) {
+        e.stopPropagation();
+        deleteStory(story.id);
+      });
+      el.addEventListener('click', () => viewStory(story.id, story));
+      list.appendChild(el);
+    });
+  } catch (e) {
+    console.error('Failed to load stories:', e);
+    showToast('加载故事失败', 'error');
   }
-  return [];
 }
 
-function getUserStories(username) {
-  const raw = localStorage.getItem('fairytale_stories_' + username);
-  if (raw) {
-    try { return JSON.parse(raw); } catch(e) {}
-  }
-  return [];
-}
-
-function saveStories(stories) {
-  localStorage.setItem(getStorageKey(), JSON.stringify(stories));
-}
-
-function keepStory() {
+async function keepStory() {
   if (!currentStory.trim()) return;
   if (!currentUser) {
     showToast('请先登录', 'error');
@@ -254,29 +342,24 @@ function keepStory() {
     }
   }
 
-  const story = {
-    id: Date.now().toString(),
-    title: title,
-    content: currentStory,
-    style: selectedStyle,
-    date: new Date().toLocaleDateString('zh-CN'),
-    timestamp: Date.now()
-  };
+  try {
+    await getStoriesRef().add({
+      title: title,
+      content: currentStory,
+      style: selectedStyle,
+      date: new Date().toLocaleDateString('zh-CN'),
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    loadStories();
+    showToast('故事已保存到目录', 'success');
+    document.getElementById('readerActions').style.display = 'none';
 
-  const stories = getStories();
-  stories.unshift(story);
-  saveStories(stories);
-  loadStories();
-  showToast('故事已保存到目录', 'success');
-  document.getElementById('readerActions').style.display = 'none';
-
-  setTimeout(() => {
-    const first = document.querySelector('.story-item');
-    if (first) first.classList.add('active');
-  }, 50);
-
-  if (isMobile()) {
-    setTimeout(() => switchMobileTab('sidebar'), 600);
+    if (isMobile()) {
+      setTimeout(() => switchMobileTab('sidebar'), 600);
+    }
+  } catch (e) {
+    console.error('Failed to save story:', e);
+    showToast('保存失败，请重试', 'error');
   }
 }
 
@@ -286,65 +369,35 @@ function discardStory() {
   showToast('故事已放弃', 'info');
 }
 
-function loadStories() {
-  const stories = getStories();
-  const list = document.getElementById('storyList');
-  const empty = document.getElementById('sidebarEmpty');
-
-  list.querySelectorAll('.story-item').forEach(el => el.remove());
-
-  if (stories.length === 0) {
-    empty.style.display = 'block';
-    return;
-  }
-
-  empty.style.display = 'none';
-
-  stories.forEach(story => {
-    const el = document.createElement('div');
-    el.className = 'story-item';
-    el.dataset.id = story.id;
-    el.innerHTML = `
-      <span class="story-item-icon">${STYLE_ICONS[story.style] || '📖'}</span>
-      <div class="story-item-body">
-        <div class="story-item-title">${escapeHtml(story.title)}</div>
-        <div class="story-item-meta">${story.date}</div>
-      </div>
-      <button class="story-item-delete" title="删除">×</button>
-    `;
-    el.querySelector('.story-item-delete').addEventListener('click', function(e) {
-      e.stopPropagation();
-      deleteStory(story.id);
-    });
-    el.addEventListener('click', () => viewStory(story.id));
-    list.appendChild(el);
-  });
-}
-
-function viewStory(id) {
-  const stories = getStories();
-  const story = stories.find(s => s.id === id);
-  if (!story) return;
-
+function viewStory(id, storyData) {
   document.querySelectorAll('.story-item').forEach(el => el.classList.remove('active'));
   const item = document.querySelector(`.story-item[data-id="${id}"]`);
   if (item) item.classList.add('active');
 
-  currentStory = story.content;
+  currentStory = storyData.content;
   showStoryArea();
-  renderStoryText(story.content);
+  renderStoryText(storyData.content);
   document.getElementById('storyText').classList.remove('streaming');
   document.getElementById('readerActions').style.display = 'none';
 
   if (isMobile()) switchMobileTab('reader');
 }
 
-function deleteStory(id) {
-  let stories = getStories();
-  stories = stories.filter(s => s.id !== id);
-  saveStories(stories);
-  loadStories();
-  showToast('故事已删除', 'info');
+async function deleteStory(id) {
+  try {
+    await getStoriesRef().doc(id).delete();
+    loadStories();
+    showToast('故事已删除', 'info');
+  } catch (e) {
+    console.error('Failed to delete story:', e);
+    showToast('删除失败', 'error');
+  }
+}
+
+function clearStoryList() {
+  const list = document.getElementById('storyList');
+  list.querySelectorAll('.story-item').forEach(el => el.remove());
+  document.getElementById('sidebarEmpty').style.display = 'block';
 }
 
 // =============================================
@@ -361,7 +414,7 @@ function initStyleCards() {
 }
 
 // =============================================
-// Story Generation (embedded API)
+// Story Generation (Qwen API)
 // =============================================
 async function generateStory() {
   if (isGenerating) {
