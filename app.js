@@ -20,7 +20,24 @@ const db = firebase.firestore();
 const API_CONFIG = {
   apiKey: 'sk-3e431fec7e3c49eeb6efb4f4390ca994',
   apiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-  model: 'qwen-plus'
+  model: 'qwen-plus',
+  imageModel: 'qwen-vl-plus'
+};
+
+// --- Picture Book Config ---
+const PICTURE_BOOK_CONFIG = {
+  shortStoryThreshold: 800, // 800字以下为短故事
+  shortStoryImages: 4,      // 短故事生成4张
+  longStoryImages: 6,       // 长故事生成6张
+  imageSize: '1024x1024'    // 图片尺寸
+};
+
+// --- Style to Art Style Mapping ---
+const STYLE_ART_PROMPTS = {
+  andersen: 'watercolor painting style, soft pastel colors, dreamy atmosphere, delicate illustrations, children book illustration, whimsical and romantic, European fairy tale aesthetic',
+  grimm: 'classic storybook illustration, detailed ink and watercolor, dark forest atmosphere, medieval European setting, Brothers Grimm aesthetic, rich textures',
+  aesop: 'simple and clean illustration style, warm earth tones, animal characters, moral story aesthetic, classic fable illustration, educational children book style',
+  eastern: 'traditional Chinese painting style, ink wash painting, oriental watercolor, mythical creatures, ancient Chinese aesthetic, poetic atmosphere, ethereal landscapes'
 };
 
 // --- State ---
@@ -31,6 +48,9 @@ let abortController = null;
 let currentUser = null;
 let currentUsername = '';
 let authMode = 'login';
+let currentStoryId = null; // 当前查看的故事ID
+let currentStoryData = null; // 当前查看的故事数据
+let storyToDelete = null; // 待删除的故事ID
 
 // --- Style prompts ---
 const STYLE_PROMPTS = {
@@ -65,7 +85,7 @@ function registerServiceWorker() {
 // --- Event Listeners ---
 function initEventListeners() {
   document.getElementById('generateBtn').addEventListener('click', generateStory);
-  document.getElementById('keepBtn').addEventListener('click', keepStory);
+  document.getElementById('keepBtn').addEventListener('click', onKeepStoryClick);
   document.getElementById('discardBtn').addEventListener('click', discardStory);
 
   // Logout button
@@ -99,6 +119,29 @@ function initEventListeners() {
   });
   document.getElementById('usernameInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') document.getElementById('passwordInput').focus();
+  });
+
+  // Picture Book Modal
+  document.getElementById('generatePictureBookBtn').addEventListener('click', () => {
+    closePictureBookModal();
+    generatePictureBook();
+  });
+  document.getElementById('skipPictureBookBtn').addEventListener('click', () => {
+    closePictureBookModal();
+    completeKeepStory();
+  });
+
+  // Delete Confirm Modal
+  document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+    closeDeleteConfirmModal();
+    if (storyToDelete) {
+      executeDeleteStory(storyToDelete);
+      storyToDelete = null;
+    }
+  });
+  document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+    closeDeleteConfirmModal();
+    storyToDelete = null;
   });
 }
 
@@ -303,8 +346,10 @@ async function loadStories() {
       const el = document.createElement('div');
       el.className = 'story-item';
       el.dataset.id = story.id;
+      // 如果有绘本，显示绘本标记
+      const hasPictureBook = story.pictureBook && story.pictureBook.length > 0 ? '🎨 ' : '';
       el.innerHTML = `
-        <span class="story-item-icon">${STYLE_ICONS[story.style] || '📖'}</span>
+        <span class="story-item-icon">${hasPictureBook}${STYLE_ICONS[story.style] || '📖'}</span>
         <div class="story-item-body">
           <div class="story-item-title">${escapeHtml(story.title)}</div>
           <div class="story-item-meta">${story.date || ''}</div>
@@ -313,7 +358,7 @@ async function loadStories() {
       `;
       el.querySelector('.story-item-delete').addEventListener('click', function(e) {
         e.stopPropagation();
-        deleteStory(story.id);
+        confirmDeleteStory(story.id);
       });
       el.addEventListener('click', () => viewStory(story.id, story));
       list.appendChild(el);
@@ -324,7 +369,10 @@ async function loadStories() {
   }
 }
 
-async function keepStory() {
+// 临时存储保存故事的数据
+let pendingStoryData = null;
+
+function onKeepStoryClick() {
   if (!currentStory.trim()) return;
   if (!currentUser) {
     showToast('请先登录', 'error');
@@ -332,6 +380,7 @@ async function keepStory() {
     return;
   }
 
+  // 准备故事数据
   const lines = currentStory.split('\n');
   let title = '未命名故事';
   for (const l of lines) {
@@ -342,14 +391,44 @@ async function keepStory() {
     }
   }
 
+  pendingStoryData = {
+    title: title,
+    content: currentStory,
+    style: selectedStyle,
+    date: new Date().toLocaleDateString('zh-CN'),
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  // 显示绘本生成确认弹窗
+  showPictureBookModal();
+}
+
+function showPictureBookModal() {
+  const modal = document.getElementById('pictureBookModal');
+  const countEl = document.getElementById('pictureBookCount');
+  const storyLength = currentStory.length;
+  const imageCount = storyLength < PICTURE_BOOK_CONFIG.shortStoryThreshold
+    ? PICTURE_BOOK_CONFIG.shortStoryImages
+    : PICTURE_BOOK_CONFIG.longStoryImages;
+
+  countEl.textContent = imageCount;
+  modal.classList.add('active');
+}
+
+function closePictureBookModal() {
+  document.getElementById('pictureBookModal').classList.remove('active');
+}
+
+async function completeKeepStory(pictureBook = null) {
+  if (!pendingStoryData) return;
+
   try {
-    await getStoriesRef().add({
-      title: title,
-      content: currentStory,
-      style: selectedStyle,
-      date: new Date().toLocaleDateString('zh-CN'),
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    const storyData = { ...pendingStoryData };
+    if (pictureBook) {
+      storyData.pictureBook = pictureBook;
+    }
+
+    await getStoriesRef().add(storyData);
     loadStories();
     showToast('故事已保存到目录', 'success');
     document.getElementById('readerActions').style.display = 'none';
@@ -360,7 +439,14 @@ async function keepStory() {
   } catch (e) {
     console.error('Failed to save story:', e);
     showToast('保存失败，请重试', 'error');
+  } finally {
+    pendingStoryData = null;
   }
+}
+
+// 保留旧函数以兼容
+async function keepStory() {
+  onKeepStoryClick();
 }
 
 function discardStory() {
@@ -375,23 +461,50 @@ function viewStory(id, storyData) {
   if (item) item.classList.add('active');
 
   currentStory = storyData.content;
+  currentStoryId = id;
+  currentStoryData = storyData;
+
   showStoryArea();
   renderStoryText(storyData.content);
   document.getElementById('storyText').classList.remove('streaming');
   document.getElementById('readerActions').style.display = 'none';
 
+  // 显示或隐藏绘本
+  renderPictureBook(storyData.pictureBook || []);
+
   if (isMobile()) switchMobileTab('reader');
 }
 
-async function deleteStory(id) {
+function confirmDeleteStory(id) {
+  storyToDelete = id;
+  document.getElementById('deleteConfirmModal').classList.add('active');
+}
+
+function closeDeleteConfirmModal() {
+  document.getElementById('deleteConfirmModal').classList.remove('active');
+}
+
+async function executeDeleteStory(id) {
   try {
     await getStoriesRef().doc(id).delete();
     loadStories();
     showToast('故事已删除', 'info');
+
+    // 如果删除的是当前查看的故事，清空阅读区
+    if (currentStoryId === id) {
+      clearReader();
+      currentStoryId = null;
+      currentStoryData = null;
+    }
   } catch (e) {
     console.error('Failed to delete story:', e);
     showToast('删除失败', 'error');
   }
+}
+
+// 保留旧函数以兼容
+async function deleteStory(id) {
+  confirmDeleteStory(id);
 }
 
 function clearStoryList() {
@@ -689,4 +802,189 @@ function switchToReaderIfMobile() {
     const readerTab = document.querySelector('.mobile-tab[data-tab="reader"]');
     if (readerTab) readerTab.classList.add('has-story');
   }
+}
+
+// =============================================
+// Picture Book Generation
+// =============================================
+async function generatePictureBook() {
+  if (!pendingStoryData) return;
+
+  const storyLength = pendingStoryData.content.length;
+  const imageCount = storyLength < PICTURE_BOOK_CONFIG.shortStoryThreshold
+    ? PICTURE_BOOK_CONFIG.shortStoryImages
+    : PICTURE_BOOK_CONFIG.longStoryImages;
+
+  showPictureBookProgressModal();
+  updateProgress(0, '正在分析故事内容...');
+
+  try {
+    // 1. 分析故事，提取关键场景
+    updateProgress(10, '正在提取故事场景...');
+    const scenes = await extractStoryScenes(pendingStoryData.content, imageCount);
+
+    // 2. 为每个场景生成图片
+    const pictureBook = [];
+    for (let i = 0; i < scenes.length; i++) {
+      const progress = 10 + Math.floor((i / scenes.length) * 80);
+      updateProgress(progress, `正在生成第 ${i + 1}/${scenes.length} 张绘本...`);
+
+      const imageUrl = await generateSceneImage(
+        scenes[i],
+        pendingStoryData.style,
+        i + 1,
+        scenes.length
+      );
+
+      pictureBook.push({
+        scene: scenes[i].description,
+        caption: scenes[i].caption,
+        imageUrl: imageUrl,
+        order: i + 1
+      });
+    }
+
+    updateProgress(100, '绘本生成完成！');
+    setTimeout(() => {
+      closePictureBookProgressModal();
+      completeKeepStory(pictureBook);
+    }, 500);
+
+  } catch (err) {
+    console.error('Picture book generation error:', err);
+    closePictureBookProgressModal();
+    showToast('绘本生成失败，但故事已保存', 'error');
+    completeKeepStory(null);
+  }
+}
+
+async function extractStoryScenes(story, count) {
+  const systemPrompt = `你是一位专业的故事分镜师。请将以下童话故事分解成${count}个关键场景，每个场景需要：
+1. 详细描述：用于AI绘画的详细英文描述（包含角色、场景、氛围、光线等）
+2. 简短说明：1-2句中文，概括这个场景的内容
+
+输出格式必须是JSON数组：
+[
+  {"description": "英文绘画描述", "caption": "中文场景说明"},
+  ...
+]`;
+
+  const response = await fetch(`${API_CONFIG.apiBase.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_CONFIG.apiKey}`
+    },
+    body: JSON.stringify({
+      model: API_CONFIG.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: story }
+      ],
+      temperature: 0.7,
+      max_tokens: 2048
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to extract scenes');
+  }
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+
+  // 提取JSON
+  const jsonMatch = content.match(/\[[\s\S]*\]/);
+  if (jsonMatch) {
+    return JSON.parse(jsonMatch[0]);
+  }
+
+  throw new Error('Invalid scene data format');
+}
+
+async function generateSceneImage(scene, style, index, total) {
+  const artStyle = STYLE_ART_PROMPTS[style] || STYLE_ART_PROMPTS.andersen;
+  const prompt = `${scene.description}, ${artStyle}, high quality, children's book illustration, page ${index} of ${total}`;
+
+  // 使用Qwen VL模型生成图片
+  const response = await fetch(`${API_CONFIG.apiBase.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_CONFIG.apiKey}`
+    },
+    body: JSON.stringify({
+      model: API_CONFIG.imageModel,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: `Generate an illustration for a children's fairy tale: ${prompt}` }
+          ]
+        }
+      ],
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error('Image generation failed');
+  }
+
+  const data = await response.json();
+
+  // Qwen VL返回的是图片URL或base64
+  const content = data.choices[0].message.content;
+
+  // 尝试提取图片URL或base64
+  const urlMatch = content.match(/https?:\/\/[^\s\"]+/);
+  if (urlMatch) {
+    return urlMatch[0];
+  }
+
+  const base64Match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
+  if (base64Match) {
+    return base64Match[0];
+  }
+
+  // 如果无法提取，返回一个占位图
+  return `https://placehold.co/1024x1024/f5e6c8/6b5744?text=绘本图片+${index}`;
+}
+
+function showPictureBookProgressModal() {
+  document.getElementById('pictureBookProgressModal').classList.add('active');
+  updateProgress(0, '准备开始...');
+}
+
+function closePictureBookProgressModal() {
+  document.getElementById('pictureBookProgressModal').classList.remove('active');
+}
+
+function updateProgress(percent, text) {
+  const fill = document.getElementById('progressFill');
+  const textEl = document.getElementById('progressText');
+  fill.style.width = `${percent}%`;
+  textEl.textContent = text;
+}
+
+function renderPictureBook(pictureBook) {
+  const section = document.getElementById('pictureBookSection');
+  const container = document.getElementById('pictureBookContainer');
+
+  if (!pictureBook || pictureBook.length === 0) {
+    section.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  section.style.display = 'block';
+  container.innerHTML = pictureBook.map((page, index) => `
+    <div class="picture-book-page">
+      <div class="page-number">${index + 1}</div>
+      <div class="page-image">
+        <img src="${escapeHtml(page.imageUrl)}" alt="绘本第${index + 1}页" loading="lazy">
+      </div>
+      <div class="page-caption">${escapeHtml(page.caption)}</div>
+    </div>
+  `).join('');
 }

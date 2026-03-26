@@ -140,6 +140,17 @@
         <span>🗑️</span> 放弃
       </button>
     </div>
+
+    <!-- 绘本展示区域 -->
+    <div class="picture-book-section" id="pictureBookSection" style="display:none;">
+      <div class="picture-book-header">
+        <span>🎨</span>
+        <h3>故事绘本</h3>
+      </div>
+      <div class="picture-book-container" id="pictureBookContainer">
+        <!-- 绘本图片将在这里动态生成 -->
+      </div>
+    </div>
   </section>
 </main>
 
@@ -171,11 +182,11 @@
       <div class="auth-error" id="authError" style="display:none;"></div>
       <label class="modal-label">
         <span>用户名</span>
-        <input type="text" id="usernameInput" placeholder="例如：小明妈妈" maxlength="20" autocomplete="username" />
+        <input type="text" id="usernameInput" placeholder="例如：小明妈妈" maxlength="20" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" />
       </label>
       <label class="modal-label">
         <span>密码</span>
-        <input type="password" id="passwordInput" placeholder="请输入密码（至少6位）" maxlength="40" autocomplete="current-password" />
+        <input type="password" id="passwordInput" placeholder="请输入密码（至少6位）" maxlength="40" autocomplete="new-password" />
       </label>
     </div>
     <div class="modal-footer">
@@ -183,6 +194,62 @@
       <div class="auth-toggle">
         <span id="authToggleText">还没有账号？</span>
         <button class="auth-toggle-btn" id="authToggleBtn">点击注册</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 绘本生成确认弹窗 -->
+<div class="modal-overlay" id="pictureBookModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🎨 生成故事绘本</h3>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">是否为此故事生成绘本图片？</p>
+      <p class="modal-hint" id="pictureBookHint">根据故事长度，将生成 <strong id="pictureBookCount">4</strong> 张绘本图片</p>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions-row">
+        <button class="modal-secondary-btn" id="skipPictureBookBtn">放弃生成</button>
+        <button class="modal-primary-btn" id="generatePictureBookBtn">
+          <span class="btn-icon">✨</span> 生成绘本
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 删除确认弹窗 -->
+<div class="modal-overlay" id="deleteConfirmModal">
+  <div class="modal modal-small">
+    <div class="modal-header">
+      <h3>⚠️ 确认删除</h3>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">确定要删除这个故事吗？此操作不可恢复。</p>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-actions-row">
+        <button class="modal-secondary-btn" id="cancelDeleteBtn">取消</button>
+        <button class="modal-danger-btn" id="confirmDeleteBtn">确认删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 绘本生成进度弹窗 -->
+<div class="modal-overlay" id="pictureBookProgressModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🎨 正在生成绘本</h3>
+    </div>
+    <div class="modal-body">
+      <div class="progress-container">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <p class="progress-text" id="progressText">正在分析故事内容...</p>
       </div>
     </div>
   </div>

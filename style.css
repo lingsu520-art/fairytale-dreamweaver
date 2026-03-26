@@ -274,14 +274,14 @@ body::before {
 /* Style Grid */
 .style-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.7rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
 }
 .style-card {
   position: relative;
   border: 2px solid var(--border-light);
   border-radius: var(--radius-md);
-  padding: 0.9rem 0.7rem;
+  padding: 0.7rem 0.4rem;
   background: rgba(255,255,255,0.55);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -316,19 +316,20 @@ body::before {
 }
 .style-card.selected .style-card-glow { opacity: 1; }
 
-.style-card-icon { font-size: 1.8rem; margin-bottom: 0.3rem; position: relative; z-index: 1; }
+.style-card-icon { font-size: 1.6rem; margin-bottom: 0.25rem; position: relative; z-index: 1; }
 .style-card-name {
   font-family: 'Ma Shan Zheng', cursive;
-  font-size: 1.08rem;
+  font-size: 0.95rem;
   position: relative;
   z-index: 1;
 }
 .style-card-desc {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
   margin-top: 2px;
   position: relative;
   z-index: 1;
+  line-height: 1.3;
 }
 
 /* Generate Button */
@@ -530,6 +531,92 @@ body::before {
   background: rgba(245, 230, 200, 0.5);
   flex-shrink: 0;
 }
+
+/* Picture Book Section */
+.picture-book-section {
+  border-top: 2px solid var(--border-light);
+  background: linear-gradient(180deg, rgba(245, 230, 200, 0.3), rgba(255, 248, 238, 0.8));
+  padding: 1.5rem;
+}
+
+.picture-book-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.picture-book-header h3 {
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 1.3rem;
+  color: var(--text-primary);
+}
+
+.picture-book-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.picture-book-page {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: var(--radius-lg);
+  padding: 1.2rem;
+  box-shadow: 0 4px 16px var(--shadow-warm);
+  border: 1px solid var(--border-light);
+  position: relative;
+}
+
+.page-number {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gold);
+  color: #fff;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.page-image {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--parchment);
+  margin-bottom: 1rem;
+}
+
+.page-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.page-image img:hover {
+  transform: scale(1.02);
+}
+
+.page-caption {
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.6;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-sm);
+}
 .action-btn {
   flex: 1;
   padding: 0.75rem;
@@ -681,6 +768,105 @@ body::before {
   transform: none;
 }
 
+/* Modal Action Buttons */
+.modal-actions-row {
+  display: flex;
+  gap: 0.8rem;
+}
+
+.modal-primary-btn,
+.modal-secondary-btn,
+.modal-danger-btn {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.modal-primary-btn {
+  background: linear-gradient(135deg, var(--gold), var(--gold-deep));
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(184,145,46,0.25);
+}
+.modal-primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 18px rgba(184,145,46,0.35);
+}
+
+.modal-secondary-btn {
+  background: rgba(180, 155, 120, 0.15);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+}
+.modal-secondary-btn:hover {
+  background: rgba(180, 155, 120, 0.25);
+}
+
+.modal-danger-btn {
+  background: linear-gradient(135deg, #c45050, #a03030);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(196,80,80,0.25);
+}
+.modal-danger-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 18px rgba(196,80,80,0.35);
+}
+
+/* Modal Small Variant */
+.modal-small {
+  width: 360px;
+}
+
+/* Modal Hint Text */
+.modal-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+.modal-hint strong {
+  color: var(--gold-deep);
+  font-size: 1.1rem;
+}
+
+/* Progress Bar */
+.progress-container {
+  padding: 1rem 0;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(180, 155, 120, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--purple));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.progress-text {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-family: 'Ma Shan Zheng', cursive;
+}
+
 /* Toast notification */
 .toast {
   position: fixed;
@@ -773,10 +959,11 @@ body::before {
     min-height: 100px;
     font-size: 1rem;
   }
-  .style-grid { gap: 0.5rem; }
-  .style-card { padding: 0.7rem 0.5rem; }
-  .style-card-icon { font-size: 1.5rem; }
-  .style-card-name { font-size: 0.95rem; }
+  .style-grid { gap: 0.4rem; }
+  .style-card { padding: 0.6rem 0.3rem; }
+  .style-card-icon { font-size: 1.3rem; margin-bottom: 0.2rem; }
+  .style-card-name { font-size: 0.85rem; }
+  .style-card-desc { font-size: 0.6rem; }
   .generate-btn {
     padding: 0.85rem;
     font-size: 1.2rem;
@@ -791,6 +978,13 @@ body::before {
   .story-text { font-size: 1rem; line-height: 1.9; }
   .reader-actions { padding: 0.75rem 1rem; }
   .action-btn { padding: 0.65rem; font-size: 1rem; }
+
+  /* Picture Book Mobile */
+  .picture-book-section { padding: 1rem; }
+  .picture-book-header h3 { font-size: 1.1rem; }
+  .picture-book-page { padding: 1rem; }
+  .page-number { width: 24px; height: 24px; font-size: 0.8rem; }
+  .page-caption { font-size: 0.9rem; }
 
   /* Show mobile tabs */
   .mobile-tabs {
@@ -845,11 +1039,18 @@ body::before {
     width: 92vw;
     border-radius: var(--radius-lg);
   }
+  .modal-small {
+    width: 85vw;
+  }
   .modal-header { padding: 1rem 1.2rem; }
   .modal-header h3 { font-size: 1.1rem; }
   .modal-body { padding: 1rem 1.2rem; }
   .modal-label input { font-size: 0.85rem; padding: 0.65rem 0.8rem; }
   .modal-footer { padding: 0 1.2rem 1.2rem; }
+  .modal-actions-row { flex-direction: column; gap: 0.6rem; }
+  .modal-primary-btn,
+  .modal-secondary-btn,
+  .modal-danger-btn { padding: 0.7rem; font-size: 0.95rem; }
 
   /* Toast */
   .toast { bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); font-size: 0.85rem; }
