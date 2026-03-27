@@ -51,7 +51,7 @@ const API_CONFIG = {
   apiKey: 'sk-3e431fec7e3c49eeb6efb4f4390ca994',
   apiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   model: 'qwen-plus',
-  imageModel: 'wan2.1-t2i-plus'
+  imageModel: 'wanx2.1-t2i-turbo'
 };
 
 // --- Picture Book Config ---
