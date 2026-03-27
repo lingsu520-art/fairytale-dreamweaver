@@ -1,5 +1,5 @@
 /* ============================================
-   童话织梦机 — Application Logic (Firebase)
+   童话织梦机 — Application Logic (Firebase + OSS)
    ============================================ */
 
 // --- Firebase Config ---
@@ -15,7 +15,22 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
-const storage = firebase.storage();
+// --- Aliyun OSS Config ---
+// 从外部配置文件读取敏感信息
+const OSS_CONFIG = window.OSS_SECRETS || {
+  region: 'oss-cn-hangzhou',
+  accessKeyId: '', // 在 config.js 中配置
+  accessKeySecret: '', // 在 config.js 中配置
+  bucket: 'fairytale-dreamweaver-images'
+};
+
+let ossClient = null;
+function getOSSClient() {
+  if (!ossClient) {
+    ossClient = new OSS(OSS_CONFIG);
+  }
+  return ossClient;
+}
 
 // --- Qwen API Config ---
 const API_CONFIG = {
@@ -948,52 +963,62 @@ async function generateSceneImage(scene, style, index, total) {
   // 如果返回的是 base64，直接构建 data URI
   if (data.data[0].b64_json) {
     const b64 = data.data[0].b64_json;
-    // 上传 base64 到 Firebase Storage 持久化
+    // 上传 base64 到阿里云 OSS 持久化
     try {
-      const storageUrl = await uploadBase64ToStorage(b64, index);
-      return storageUrl;
+      const ossUrl = await uploadBase64ToOSS(b64, index);
+      return ossUrl;
     } catch (e) {
-      console.warn('Storage upload failed, using base64:', e);
+      console.warn('OSS upload failed, using base64:', e);
       return `data:image/png;base64,${b64}`;
     }
   }
 
-  // 返回的是临时 URL，尝试下载并上传到 Firebase Storage 持久化
+  // 返回的是临时 URL，尝试下载并上传到阿里云 OSS 持久化
   try {
-    const storageUrl = await uploadUrlToStorage(tempUrl, index);
-    return storageUrl;
+    const ossUrl = await uploadUrlToOSS(tempUrl, index);
+    return ossUrl;
   } catch (e) {
-    console.warn('Storage upload failed, using temp URL:', e);
+    console.warn('OSS upload failed, using temp URL:', e);
     return tempUrl;
   }
 }
 
-// 将图片URL下载并上传到 Firebase Storage
-async function uploadUrlToStorage(imageUrl, index) {
+// 将图片URL下载并上传到阿里云 OSS
+async function uploadUrlToOSS(imageUrl, index) {
   if (!currentUser) throw new Error('Not authenticated');
 
   const response = await fetch(imageUrl);
   if (!response.ok) throw new Error('Failed to fetch image');
   const blob = await response.blob();
+  const buffer = await blob.arrayBuffer();
 
-  const filename = `picturebook_${Date.now()}_${index}.png`;
-  const path = `users/${currentUser.uid}/picturebooks/${filename}`;
-  const ref = storage.ref().child(path);
+  const filename = `users/${currentUser.uid}/picturebooks/picturebook_${Date.now()}_${index}.png`;
+  const client = getOSSClient();
+  const result = await client.put(filename, new Blob([buffer], { type: 'image/png' }));
 
-  await ref.put(blob, { contentType: 'image/png' });
-  return await ref.getDownloadURL();
+  // 返回公网可访问的 URL
+  return result.url || `https://${OSS_CONFIG.bucket}.${OSS_CONFIG.region}.aliyuncs.com/${filename}`;
 }
 
-// 将 base64 图片上传到 Firebase Storage
-async function uploadBase64ToStorage(b64Data, index) {
+// 将 base64 图片上传到阿里云 OSS
+async function uploadBase64ToOSS(b64Data, index) {
   if (!currentUser) throw new Error('Not authenticated');
 
-  const filename = `picturebook_${Date.now()}_${index}.png`;
-  const path = `users/${currentUser.uid}/picturebooks/${filename}`;
-  const ref = storage.ref().child(path);
+  // base64 转 Blob
+  const byteChars = atob(b64Data);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNumbers[i] = byteChars.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: 'image/png' });
 
-  await ref.putString(b64Data, 'base64', { contentType: 'image/png' });
-  return await ref.getDownloadURL();
+  const filename = `users/${currentUser.uid}/picturebooks/picturebook_${Date.now()}_${index}.png`;
+  const client = getOSSClient();
+  const result = await client.put(filename, blob);
+
+  // 返回公网可访问的 URL
+  return result.url || `https://${OSS_CONFIG.bucket}.${OSS_CONFIG.region}.aliyuncs.com/${filename}`;
 }
 
 function showPictureBookProgressModal() {
