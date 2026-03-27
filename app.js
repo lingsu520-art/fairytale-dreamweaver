@@ -962,24 +962,17 @@ async function generateSceneImage(scene, style, index, total) {
   const artStyle = STYLE_ART_PROMPTS[style] || STYLE_ART_PROMPTS.andersen;
   const prompt = `${scene.description}, ${artStyle}, high quality, children's book illustration`;
 
-  // 使用 DashScope 原生异步 API 提交文生图任务
-  const submitUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis';
-  const submitResponse = await fetch(submitUrl, {
+  // 通过后端代理调用 DashScope 文生图异步 API（绕过浏览器 CORS 限制）
+  const submitResponse = await fetch(`${STS_SERVER}/image/generate`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_CONFIG.apiKey}`,
-      'X-DashScope-Async': 'enable'
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: API_CONFIG.imageModel,
-      input: {
-        prompt: prompt
-      },
-      parameters: {
-        size: '1024*1024',
-        n: 1
-      }
+      prompt: prompt,
+      size: '1024*1024',
+      n: 1
     })
   });
 
@@ -1009,21 +1002,15 @@ async function generateSceneImage(scene, style, index, total) {
   }
 }
 
-// 轮询 DashScope 异步任务直到完成
+// 通过后端代理轮询 DashScope 异步任务
 async function pollImageTask(taskId) {
-  const taskUrl = `https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`;
-  const maxAttempts = 60; // 最多轮询60次
-  const pollInterval = 3000; // 每3秒查询一次
+  const maxAttempts = 60;
+  const pollInterval = 3000;
 
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-    const response = await fetch(taskUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${API_CONFIG.apiKey}`
-      }
-    });
+    const response = await fetch(`${STS_SERVER}/image/task/${taskId}`);
 
     if (!response.ok) {
       console.error('Task query error:', response.status);

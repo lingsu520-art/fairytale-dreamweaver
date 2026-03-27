@@ -74,7 +74,7 @@ var PORT = process.env.FC_SERVER_PORT || 9000;
 var server = http.createServer(function(req, res) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Content-Type', 'application/json');
 
@@ -123,6 +123,44 @@ var server = http.createServer(function(req, res) {
     return;
   }
 
+  // 图片生成 - 提交任务
+  if (path === '/image/generate' && req.method === 'POST') {
+    var dashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+    if (!dashscopeApiKey) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Missing DASHSCOPE_API_KEY env var' }));
+      return;
+    }
+
+    var body = '';
+    req.on('data', function(chunk) { body += chunk; });
+    req.on('end', function() {
+      try {
+        var payload = JSON.parse(body);
+        proxyDashScopeImageGenerate(dashscopeApiKey, payload, res);
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      }
+    });
+    return;
+  }
+
+  // 图片生成 - 查询任务状态
+  var taskMatch = path.match(/^\/image\/task\/(.+)$/);
+  if (taskMatch && req.method === 'GET') {
+    var dashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+    if (!dashscopeApiKey) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Missing DASHSCOPE_API_KEY env var' }));
+      return;
+    }
+
+    var taskId = taskMatch[1];
+    proxyDashScopeTaskQuery(dashscopeApiKey, taskId, res);
+    return;
+  }
+
   res.writeHead(404);
   res.end(JSON.stringify({ error: 'Not Found' }));
 });
@@ -130,3 +168,76 @@ var server = http.createServer(function(req, res) {
 server.listen(PORT, function() {
   console.log('STS server listening on port ' + PORT);
 });
+
+// ---------- DashScope 图片生成代理 ----------
+
+function proxyDashScopeImageGenerate(apiKey, payload, res) {
+  var postData = JSON.stringify({
+    model: payload.model || 'wanx2.1-t2i-turbo',
+    input: {
+      prompt: payload.prompt || ''
+    },
+    parameters: {
+      size: payload.size || '1024*1024',
+      n: payload.n || 1
+    }
+  });
+
+  var options = {
+    hostname: 'dashscope.aliyuncs.com',
+    port: 443,
+    path: '/api/v1/services/aigc/text2image/image-synthesis',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + apiKey,
+      'X-DashScope-Async': 'enable',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  };
+
+  var proxyReq = https.request(options, function(proxyRes) {
+    var data = '';
+    proxyRes.on('data', function(chunk) { data += chunk; });
+    proxyRes.on('end', function() {
+      res.writeHead(proxyRes.statusCode);
+      res.end(data);
+    });
+  });
+
+  proxyReq.on('error', function(err) {
+    res.writeHead(500);
+    res.end(JSON.stringify({ error: 'Proxy request failed', message: err.message }));
+  });
+
+  proxyReq.write(postData);
+  proxyReq.end();
+}
+
+function proxyDashScopeTaskQuery(apiKey, taskId, res) {
+  var options = {
+    hostname: 'dashscope.aliyuncs.com',
+    port: 443,
+    path: '/api/v1/tasks/' + encodeURIComponent(taskId),
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer ' + apiKey
+    }
+  };
+
+  var proxyReq = https.request(options, function(proxyRes) {
+    var data = '';
+    proxyRes.on('data', function(chunk) { data += chunk; });
+    proxyRes.on('end', function() {
+      res.writeHead(proxyRes.statusCode);
+      res.end(data);
+    });
+  });
+
+  proxyReq.on('error', function(err) {
+    res.writeHead(500);
+    res.end(JSON.stringify({ error: 'Proxy request failed', message: err.message }));
+  });
+
+  proxyReq.end();
+}

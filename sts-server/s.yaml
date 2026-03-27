@@ -23,6 +23,7 @@ resources:
         ACCESS_KEY_ID: ${env.ACCESS_KEY_ID}
         ACCESS_KEY_SECRET: ${env.ACCESS_KEY_SECRET}
         ROLE_ARN: acs:ram::1481012644000282:role/oss-upload-role
+        DASHSCOPE_API_KEY: ${env.DASHSCOPE_API_KEY}
       triggers:
         - triggerName: http-trigger
           triggerType: http
