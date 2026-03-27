@@ -15,13 +15,14 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 // --- Qwen API Config ---
 const API_CONFIG = {
   apiKey: 'sk-3e431fec7e3c49eeb6efb4f4390ca994',
   apiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   model: 'qwen-plus',
-  imageModel: 'qwen-vl-plus'
+  imageModel: 'wanx2.1-t2i-turbo'
 };
 
 // --- Picture Book Config ---
@@ -93,22 +94,14 @@ function initEventListeners() {
 
   // Modal
   const userModal = document.getElementById('userModal');
-  function onOverlayClose(e) {
+  userModal.addEventListener('click', function(e) {
     if (e.target === userModal && currentUser) {
-      e.preventDefault();
       closeUserModal();
     }
-  }
-  userModal.addEventListener('mousedown', onOverlayClose);
-  userModal.addEventListener('touchend', onOverlayClose);
+  });
 
-  const modalCloseBtn = document.getElementById('modalCloseBtn');
-  modalCloseBtn.addEventListener('click', closeUserModal);
-  modalCloseBtn.addEventListener('touchend', function(e) { e.preventDefault(); closeUserModal(); });
-
-  const modalLoginBtn = document.getElementById('modalLoginBtn');
-  modalLoginBtn.addEventListener('click', handleAuth);
-  modalLoginBtn.addEventListener('touchend', function(e) { e.preventDefault(); handleAuth(); });
+  document.getElementById('modalCloseBtn').addEventListener('click', closeUserModal);
+  document.getElementById('modalLoginBtn').addEventListener('click', handleAuth);
 
   // Auth mode toggle
   document.getElementById('authToggleBtn').addEventListener('click', toggleAuthMode);
@@ -244,6 +237,14 @@ async function handleAuth() {
   btn.textContent = authMode === 'login' ? '登录中…' : '注册中…';
   hideAuthError();
 
+  // 15秒超时保护，防止永远卡在"登录中"
+  const authTimeout = setTimeout(() => {
+    _authBusy = false;
+    btn.disabled = false;
+    btn.textContent = authMode === 'login' ? '登录' : '注册';
+    showAuthError('操作超时，请检查网络后重试');
+  }, 15000);
+
   try {
     if (authMode === 'register') {
       const cred = await auth.createUserWithEmailAndPassword(email, password);
@@ -262,6 +263,7 @@ async function handleAuth() {
     const msg = getAuthErrorMessage(err.code);
     showAuthError(msg);
   } finally {
+    clearTimeout(authTimeout);
     _authBusy = false;
     btn.disabled = false;
     btn.textContent = authMode === 'login' ? '登录' : '注册';
@@ -391,9 +393,13 @@ function onKeepStoryClick() {
     }
   }
 
+  // 获取用户的原始输入
+  const userInputText = document.getElementById('userInput').value.trim();
+
   pendingStoryData = {
     title: title,
     content: currentStory,
+    userInput: userInputText,
     style: selectedStyle,
     date: new Date().toLocaleDateString('zh-CN'),
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -703,6 +709,9 @@ function clearReader() {
   document.getElementById('storyText').style.display = 'none';
   document.getElementById('readerPlaceholder').style.display = 'block';
   document.getElementById('readerActions').style.display = 'none';
+  // 清理绘本区域
+  document.getElementById('pictureBookSection').style.display = 'none';
+  document.getElementById('pictureBookContainer').innerHTML = '';
   currentStory = '';
 }
 
@@ -904,10 +913,10 @@ async function extractStoryScenes(story, count) {
 
 async function generateSceneImage(scene, style, index, total) {
   const artStyle = STYLE_ART_PROMPTS[style] || STYLE_ART_PROMPTS.andersen;
-  const prompt = `${scene.description}, ${artStyle}, high quality, children's book illustration, page ${index} of ${total}`;
+  const prompt = `${scene.description}, ${artStyle}, high quality, children's book illustration`;
 
-  // 使用Qwen VL模型生成图片
-  const response = await fetch(`${API_CONFIG.apiBase.replace(/\/$/, '')}/chat/completions`, {
+  // 使用 DashScope 文生图 API（wanx2.1-t2i-turbo）
+  const response = await fetch(`${API_CONFIG.apiBase.replace(/\/$/, '')}/images/generations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -915,40 +924,76 @@ async function generateSceneImage(scene, style, index, total) {
     },
     body: JSON.stringify({
       model: API_CONFIG.imageModel,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: `Generate an illustration for a children's fairy tale: ${prompt}` }
-          ]
-        }
-      ],
-      temperature: 0.7
+      prompt: prompt,
+      n: 1,
+      size: '1024*1024'
     })
   });
 
   if (!response.ok) {
-    throw new Error('Image generation failed');
+    const errText = await response.text().catch(() => '');
+    console.error('Image API error:', response.status, errText);
+    throw new Error(`图片生成失败 (${response.status})`);
   }
 
   const data = await response.json();
 
-  // Qwen VL返回的是图片URL或base64
-  const content = data.choices[0].message.content;
-
-  // 尝试提取图片URL或base64
-  const urlMatch = content.match(/https?:\/\/[^\s\"]+/);
-  if (urlMatch) {
-    return urlMatch[0];
+  // DashScope compatible mode 返回格式: { data: [{ url: "..." }] }
+  const tempUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
+  if (!tempUrl) {
+    console.error('Image API response:', JSON.stringify(data));
+    throw new Error('图片生成返回数据异常');
   }
 
-  const base64Match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
-  if (base64Match) {
-    return base64Match[0];
+  // 如果返回的是 base64，直接构建 data URI
+  if (data.data[0].b64_json) {
+    const b64 = data.data[0].b64_json;
+    // 上传 base64 到 Firebase Storage 持久化
+    try {
+      const storageUrl = await uploadBase64ToStorage(b64, index);
+      return storageUrl;
+    } catch (e) {
+      console.warn('Storage upload failed, using base64:', e);
+      return `data:image/png;base64,${b64}`;
+    }
   }
 
-  // 如果无法提取，返回一个占位图
-  return `https://placehold.co/1024x1024/f5e6c8/6b5744?text=绘本图片+${index}`;
+  // 返回的是临时 URL，尝试下载并上传到 Firebase Storage 持久化
+  try {
+    const storageUrl = await uploadUrlToStorage(tempUrl, index);
+    return storageUrl;
+  } catch (e) {
+    console.warn('Storage upload failed, using temp URL:', e);
+    return tempUrl;
+  }
+}
+
+// 将图片URL下载并上传到 Firebase Storage
+async function uploadUrlToStorage(imageUrl, index) {
+  if (!currentUser) throw new Error('Not authenticated');
+
+  const response = await fetch(imageUrl);
+  if (!response.ok) throw new Error('Failed to fetch image');
+  const blob = await response.blob();
+
+  const filename = `picturebook_${Date.now()}_${index}.png`;
+  const path = `users/${currentUser.uid}/picturebooks/${filename}`;
+  const ref = storage.ref().child(path);
+
+  await ref.put(blob, { contentType: 'image/png' });
+  return await ref.getDownloadURL();
+}
+
+// 将 base64 图片上传到 Firebase Storage
+async function uploadBase64ToStorage(b64Data, index) {
+  if (!currentUser) throw new Error('Not authenticated');
+
+  const filename = `picturebook_${Date.now()}_${index}.png`;
+  const path = `users/${currentUser.uid}/picturebooks/${filename}`;
+  const ref = storage.ref().child(path);
+
+  await ref.putString(b64Data, 'base64', { contentType: 'image/png' });
+  return await ref.getDownloadURL();
 }
 
 function showPictureBookProgressModal() {
@@ -982,7 +1027,8 @@ function renderPictureBook(pictureBook) {
     <div class="picture-book-page">
       <div class="page-number">${index + 1}</div>
       <div class="page-image">
-        <img src="${escapeHtml(page.imageUrl)}" alt="绘本第${index + 1}页" loading="lazy">
+        <img src="${escapeHtml(page.imageUrl)}" alt="绘本第${index + 1}页" loading="lazy"
+             onerror="this.onerror=null; this.src=''; this.parentElement.innerHTML='<div class=\\'page-image-error\\'>图片加载失败</div>';">
       </div>
       <div class="page-caption">${escapeHtml(page.caption)}</div>
     </div>

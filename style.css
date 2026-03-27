@@ -617,6 +617,19 @@ body::before {
   background: rgba(255, 255, 255, 0.5);
   border-radius: var(--radius-sm);
 }
+
+.page-image-error {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--parchment);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 1rem;
+}
 .action-btn {
   flex: 1;
   padding: 0.75rem;
