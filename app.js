@@ -962,57 +962,90 @@ async function generateSceneImage(scene, style, index, total) {
   const artStyle = STYLE_ART_PROMPTS[style] || STYLE_ART_PROMPTS.andersen;
   const prompt = `${scene.description}, ${artStyle}, high quality, children's book illustration`;
 
-  // 使用 DashScope 文生图 API（wanx2.1-t2i-turbo）
-  const response = await fetch(`${API_CONFIG.apiBase.replace(/\/$/, '')}/images/generations`, {
+  // 使用 DashScope 原生异步 API 提交文生图任务
+  const submitUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis';
+  const submitResponse = await fetch(submitUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_CONFIG.apiKey}`
+      'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+      'X-DashScope-Async': 'enable'
     },
     body: JSON.stringify({
       model: API_CONFIG.imageModel,
-      prompt: prompt,
-      n: 1,
-      size: '1024*1024'
+      input: {
+        prompt: prompt
+      },
+      parameters: {
+        size: '1024*1024',
+        n: 1
+      }
     })
   });
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    console.error('Image API error:', response.status, errText);
-    throw new Error(`图片生成失败 (${response.status})`);
+  if (!submitResponse.ok) {
+    const errText = await submitResponse.text().catch(() => '');
+    console.error('Image API submit error:', submitResponse.status, errText);
+    throw new Error(`图片生成提交失败 (${submitResponse.status})`);
   }
 
-  const data = await response.json();
-
-  // DashScope compatible mode 返回格式: { data: [{ url: "..." }] }
-  const tempUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
-  if (!tempUrl) {
-    console.error('Image API response:', JSON.stringify(data));
-    throw new Error('图片生成返回数据异常');
+  const submitData = await submitResponse.json();
+  const taskId = submitData.output?.task_id;
+  if (!taskId) {
+    console.error('Image API submit response:', JSON.stringify(submitData));
+    throw new Error('图片生成任务创建失败');
   }
 
-  // 如果返回的是 base64，直接构建 data URI
-  if (data.data[0].b64_json) {
-    const b64 = data.data[0].b64_json;
-    // 上传 base64 到阿里云 OSS 持久化
-    try {
-      const ossUrl = await uploadBase64ToOSS(b64, index);
-      return ossUrl;
-    } catch (e) {
-      console.warn('OSS upload failed, using base64:', e);
-      return `data:image/png;base64,${b64}`;
-    }
-  }
+  // 轮询查询任务结果
+  const imageUrl = await pollImageTask(taskId);
 
-  // 返回的是临时 URL，尝试下载并上传到阿里云 OSS 持久化
+  // 尝试上传到阿里云 OSS 持久化
   try {
-    const ossUrl = await uploadUrlToOSS(tempUrl, index);
+    const ossUrl = await uploadUrlToOSS(imageUrl, index);
     return ossUrl;
   } catch (e) {
-    console.warn('OSS upload failed, using temp URL:', e);
-    return tempUrl;
+    console.warn('OSS upload failed, using original URL:', e);
+    return imageUrl;
   }
+}
+
+// 轮询 DashScope 异步任务直到完成
+async function pollImageTask(taskId) {
+  const taskUrl = `https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`;
+  const maxAttempts = 60; // 最多轮询60次
+  const pollInterval = 3000; // 每3秒查询一次
+
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+    const response = await fetch(taskUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${API_CONFIG.apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      console.error('Task query error:', response.status);
+      continue;
+    }
+
+    const data = await response.json();
+    const status = data.output?.task_status;
+
+    if (status === 'SUCCEEDED') {
+      const resultUrl = data.output?.results?.[0]?.url;
+      if (resultUrl) return resultUrl;
+      throw new Error('任务成功但未返回图片URL');
+    } else if (status === 'FAILED') {
+      const errMsg = data.output?.message || '未知错误';
+      console.error('Image task failed:', errMsg);
+      throw new Error(`图片生成失败: ${errMsg}`);
+    }
+    // PENDING 或 RUNNING 状态继续等待
+  }
+
+  throw new Error('图片生成超时');
 }
 
 // 将图片URL下载并上传到阿里云 OSS
