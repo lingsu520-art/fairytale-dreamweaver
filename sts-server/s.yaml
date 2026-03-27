@@ -1,0 +1,34 @@
+edition: 3.0.0
+name: fairytale-sts
+access: default
+
+vars:
+  region: cn-hangzhou
+  service:
+    name: fairytale-sts-service
+    description: STS Token Service for Fairytale Dreamweaver
+
+resources:
+  sts-function:
+    component: fc3
+    props:
+      region: ${vars.region}
+      functionName: fairytale-sts
+      runtime: nodejs18
+      code: ./
+      handler: index.handler
+      memorySize: 128
+      timeout: 10
+      environmentVariables:
+        ACCESS_KEY_ID: ${env.ACCESS_KEY_ID}
+        ACCESS_KEY_SECRET: ${env.ACCESS_KEY_SECRET}
+        ROLE_ARN: acs:ram::1481012644000282:role/oss-upload-role
+      triggers:
+        - triggerName: http-trigger
+          triggerType: http
+          triggerConfig:
+            authType: anonymous
+            methods:
+              - GET
+              - POST
+              - OPTIONS

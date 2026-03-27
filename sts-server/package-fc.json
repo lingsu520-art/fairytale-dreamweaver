@@ -1,0 +1,9 @@
+{
+  "name": "fairytale-sts-fc",
+  "version": "1.0.0",
+  "description": "Alibaba Cloud STS token service for fairytale-dreamweaver (Function Compute)",
+  "main": "index.js",
+  "dependencies": {
+    "@alicloud/pop-core": "^1.7.13"
+  }
+}
