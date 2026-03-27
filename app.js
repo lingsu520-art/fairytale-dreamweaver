@@ -51,7 +51,7 @@ const API_CONFIG = {
   apiKey: 'sk-3e431fec7e3c49eeb6efb4f4390ca994',
   apiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   model: 'qwen-plus',
-  imageModel: 'wanx2.1-t2i-turbo'
+  imageModel: 'wan2.1-t2i-plus'
 };
 
 // --- Picture Book Config ---
@@ -151,6 +151,14 @@ function initEventListeners() {
   document.getElementById('skipPictureBookBtn').addEventListener('click', () => {
     closePictureBookModal();
     completeKeepStory();
+  });
+
+  // Reader Tab Switching
+  document.querySelectorAll('.reader-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetTab = tab.dataset.readerTab;
+      switchReaderTab(targetTab);
+    });
   });
 
   // Delete Confirm Modal
@@ -504,8 +512,11 @@ function viewStory(id, storyData) {
   document.getElementById('storyText').classList.remove('streaming');
   document.getElementById('readerActions').style.display = 'none';
 
-  // 显示或隐藏绘本
+  // 渲染绘本内容
   renderPictureBook(storyData.pictureBook || []);
+
+  // 默认切到故事浏览 tab
+  switchReaderTab('story');
 
   if (isMobile()) switchMobileTab('reader');
 }
@@ -739,8 +750,15 @@ function clearReader() {
   document.getElementById('readerPlaceholder').style.display = 'block';
   document.getElementById('readerActions').style.display = 'none';
   // 清理绘本区域
-  document.getElementById('pictureBookSection').style.display = 'none';
   document.getElementById('pictureBookContainer').innerHTML = '';
+  document.getElementById('pictureBookContainer').style.display = 'none';
+  const placeholder = document.getElementById('pictureBookPlaceholder');
+  if (placeholder) placeholder.style.display = 'block';
+  // 重置绘本 tab 标记
+  const picturebookTab = document.getElementById('readerTabPicturebook');
+  if (picturebookTab) picturebookTab.classList.remove('has-content');
+  // 切回故事浏览 tab
+  switchReaderTab('story');
   currentStory = '';
 }
 
@@ -1049,17 +1067,41 @@ function updateProgress(percent, text) {
   textEl.textContent = text;
 }
 
+// =============================================
+// Reader Tab Switching
+// =============================================
+function switchReaderTab(tabName) {
+  // 更新 tab 按钮状态
+  document.querySelectorAll('.reader-tab').forEach(t => t.classList.remove('active'));
+  const activeTab = document.querySelector(`.reader-tab[data-reader-tab="${tabName}"]`);
+  if (activeTab) activeTab.classList.add('active');
+
+  // 更新 tab 内容区域
+  document.querySelectorAll('.reader-tab-content').forEach(c => c.classList.remove('active'));
+  if (tabName === 'story') {
+    document.getElementById('storyTabContent').classList.add('active');
+  } else if (tabName === 'picturebook') {
+    document.getElementById('picturebookTabContent').classList.add('active');
+  }
+}
+
 function renderPictureBook(pictureBook) {
-  const section = document.getElementById('pictureBookSection');
   const container = document.getElementById('pictureBookContainer');
+  const placeholder = document.getElementById('pictureBookPlaceholder');
+  const picturebookTab = document.getElementById('readerTabPicturebook');
 
   if (!pictureBook || pictureBook.length === 0) {
-    section.style.display = 'none';
     container.innerHTML = '';
+    container.style.display = 'none';
+    if (placeholder) placeholder.style.display = 'block';
+    if (picturebookTab) picturebookTab.classList.remove('has-content');
     return;
   }
 
-  section.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'none';
+  container.style.display = 'flex';
+  if (picturebookTab) picturebookTab.classList.add('has-content');
+
   container.innerHTML = pictureBook.map((page, index) => `
     <div class="picture-book-page">
       <div class="page-number">${index + 1}</div>

@@ -123,36 +123,49 @@
   <!-- RIGHT: Story Display -->
   <section class="reader-panel">
     <div class="reader-header">
-      <span>📜</span>
-      <h2>故事浏览</h2>
-    </div>
-    <div class="reader-content" id="readerContent">
-      <div class="reader-placeholder" id="readerPlaceholder">
-        <div class="placeholder-book">📚</div>
-        <p>输入你的创意灵感</p>
-        <p>选择一种童话风格</p>
-        <p>点击「开始织梦」</p>
-        <p class="placeholder-hint">一个专属的童话故事即将诞生……</p>
+      <div class="reader-tabs">
+        <button class="reader-tab active" data-reader-tab="story" id="readerTabStory">
+          <span>📜</span> 故事浏览
+        </button>
+        <button class="reader-tab" data-reader-tab="picturebook" id="readerTabPicturebook">
+          <span>🎨</span> 故事绘本
+        </button>
       </div>
-      <div class="story-text" id="storyText" style="display:none;"></div>
-    </div>
-    <div class="reader-actions" id="readerActions" style="display:none;">
-      <button class="action-btn keep-btn" id="keepBtn">
-        <span>💾</span> 保留故事
-      </button>
-      <button class="action-btn discard-btn" id="discardBtn">
-        <span>🗑️</span> 放弃
-      </button>
     </div>
 
-    <!-- 绘本展示区域 -->
-    <div class="picture-book-section" id="pictureBookSection" style="display:none;">
-      <div class="picture-book-header">
-        <span>🎨</span>
-        <h3>故事绘本</h3>
+    <!-- 故事浏览内容 -->
+    <div class="reader-tab-content active" id="storyTabContent">
+      <div class="reader-content" id="readerContent">
+        <div class="reader-placeholder" id="readerPlaceholder">
+          <div class="placeholder-book">📚</div>
+          <p>输入你的创意灵感</p>
+          <p>选择一种童话风格</p>
+          <p>点击「开始织梦」</p>
+          <p class="placeholder-hint">一个专属的童话故事即将诞生……</p>
+        </div>
+        <div class="story-text" id="storyText" style="display:none;"></div>
       </div>
-      <div class="picture-book-container" id="pictureBookContainer">
-        <!-- 绘本图片将在这里动态生成 -->
+      <div class="reader-actions" id="readerActions" style="display:none;">
+        <button class="action-btn keep-btn" id="keepBtn">
+          <span>💾</span> 保留故事
+        </button>
+        <button class="action-btn discard-btn" id="discardBtn">
+          <span>🗑️</span> 放弃
+        </button>
+      </div>
+    </div>
+
+    <!-- 绘本展示内容 -->
+    <div class="reader-tab-content" id="picturebookTabContent">
+      <div class="picture-book-content" id="pictureBookSection">
+        <div class="picture-book-placeholder" id="pictureBookPlaceholder">
+          <div class="placeholder-book">🎨</div>
+          <p>还没有绘本内容</p>
+          <p class="placeholder-hint">保存故事时选择生成绘本<br>精美插图将出现在这里</p>
+        </div>
+        <div class="picture-book-container" id="pictureBookContainer">
+          <!-- 绘本图片将在这里动态生成 -->
+        </div>
       </div>
     </div>
   </section>

@@ -463,17 +463,95 @@ body::before {
   overflow: hidden;
 }
 .reader-header {
-  padding: 1.2rem 1.5rem 0.8rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  padding: 0;
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
-.reader-header h2 {
-  font-family: 'Ma Shan Zheng', cursive;
-  font-size: 1.3rem;
+
+/* Reader Tabs */
+.reader-tabs {
+  display: flex;
+  width: 100%;
 }
+.reader-tab {
+  flex: 1;
+  padding: 0.9rem 1rem;
+  border: none;
+  background: transparent;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  position: relative;
+}
+.reader-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 3px;
+  background: var(--gold);
+  border-radius: 3px 3px 0 0;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.reader-tab:hover {
+  color: var(--text-secondary);
+  background: rgba(232, 200, 122, 0.08);
+}
+.reader-tab.active {
+  color: var(--gold-deep);
+  background: rgba(232, 200, 122, 0.12);
+}
+.reader-tab.active::after {
+  opacity: 1;
+}
+.reader-tab.has-content span:first-child::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--rose);
+  border-radius: 50%;
+  margin-left: 2px;
+  vertical-align: top;
+}
+
+/* Reader Tab Content */
+.reader-tab-content {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.reader-tab-content.active {
+  display: flex;
+}
+
+/* Picture Book Content Area */
+.picture-book-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+.picture-book-content::-webkit-scrollbar { width: 5px; }
+.picture-book-content::-webkit-scrollbar-thumb { background: var(--gold-soft); border-radius: 4px; }
+
+.picture-book-placeholder {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+.picture-book-placeholder .placeholder-book { font-size: 3.5rem; margin-bottom: 1.2rem; opacity: 0.4; animation: floatSoft 6s ease-in-out infinite; }
+.picture-book-placeholder p { font-size: 0.95rem; line-height: 2; }
+.picture-book-placeholder .placeholder-hint { font-size: 0.82rem; margin-top: 1rem; opacity: 0.6; font-style: italic; }
 .reader-content {
   flex: 1;
   overflow-y: auto;
@@ -533,29 +611,8 @@ body::before {
 }
 
 /* Picture Book Section */
-.picture-book-section {
-  border-top: 2px solid var(--border-light);
-  background: linear-gradient(180deg, rgba(245, 230, 200, 0.3), rgba(255, 248, 238, 0.8));
-  padding: 1.5rem;
-}
-
-.picture-book-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  padding-bottom: 0.8rem;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.picture-book-header h3 {
-  font-family: 'Ma Shan Zheng', cursive;
-  font-size: 1.3rem;
-  color: var(--text-primary);
-}
-
 .picture-book-container {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 2rem;
 }
@@ -993,11 +1050,14 @@ body::before {
   .action-btn { padding: 0.65rem; font-size: 1rem; }
 
   /* Picture Book Mobile */
-  .picture-book-section { padding: 1rem; }
-  .picture-book-header h3 { font-size: 1.1rem; }
+  .picture-book-content { padding: 1rem; }
   .picture-book-page { padding: 1rem; }
   .page-number { width: 24px; height: 24px; font-size: 0.8rem; }
   .page-caption { font-size: 0.9rem; }
+
+  /* Reader Tabs Mobile */
+  .reader-tab { font-size: 0.95rem; padding: 0.7rem 0.5rem; }
+  .reader-tab::after { left: 15%; right: 15%; }
 
   /* Show mobile tabs */
   .mobile-tabs {
