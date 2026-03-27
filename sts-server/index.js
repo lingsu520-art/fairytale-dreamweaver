@@ -8,25 +8,25 @@ const stsClient = new China_Core({
   apiVersion: '2015-04-01',
 });
 
-exports.handler = async (req, res, context) => {
+exports.handler = async function(request, response, context) {
   // 设置 CORS 头
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    res.setStatusCode(204);
-    return res.send('');
+  if (request.method === 'OPTIONS') {
+    response.setStatusCode(204);
+    return response.send('');
   }
 
   // 健康检查
-  if (req.path === '/health') {
-    res.setHeader('Content-Type', 'application/json');
-    return res.send(JSON.stringify({ status: 'ok' }));
+  if (request.path === '/health') {
+    response.setHeader('Content-Type', 'application/json');
+    return response.send(Buffer.from(JSON.stringify({ status: 'ok' })));
   }
 
   // STS Token 接口
-  if (req.path === '/sts-token' || req.path === '/') {
+  if (request.path === '/sts-token' || request.path === '/') {
     try {
       const result = await stsClient.request('AssumeRole', {
         RoleArn: process.env.ROLE_ARN,
@@ -35,21 +35,22 @@ exports.handler = async (req, res, context) => {
       }, { method: 'POST' });
 
       const cred = result.Credentials;
-      res.setHeader('Content-Type', 'application/json');
-      return res.send(JSON.stringify({
+      response.setHeader('Content-Type', 'application/json');
+      return response.send(Buffer.from(JSON.stringify({
         accessKeyId: cred.AccessKeyId,
         accessKeySecret: cred.AccessKeySecret,
         stsToken: cred.SecurityToken,
         expiration: cred.Expiration,
-      }));
+      })));
     } catch (err) {
       console.error('STS error:', err.message);
-      res.setStatusCode(500);
-      res.setHeader('Content-Type', 'application/json');
-      return res.send(JSON.stringify({ error: 'Failed to get STS token' }));
+      response.setStatusCode(500);
+      response.setHeader('Content-Type', 'application/json');
+      return response.send(Buffer.from(JSON.stringify({ error: 'Failed to get STS token', message: err.message })));
     }
   }
 
-  res.setStatusCode(404);
-  return res.send('Not Found');
+  response.setStatusCode(404);
+  return response.send(Buffer.from('Not Found'));
 };
+
