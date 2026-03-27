@@ -1,56 +1,132 @@
-const China_Core = require('@alicloud/pop-core');
+// ============================================
+// STS Token Service — 零依赖 Web 函数版本
+// 适用于 FC3 Web 函数模式
+// ============================================
 
-// 从环境变量读取配置
-const stsClient = new China_Core({
-  accessKeyId: process.env.ACCESS_KEY_ID,
-  accessKeySecret: process.env.ACCESS_KEY_SECRET,
-  endpoint: 'https://sts.aliyuncs.com',
-  apiVersion: '2015-04-01',
-});
+const crypto = require('crypto');
+const https = require('https');
+const http = require('http');
 
-exports.handler = async function(request, response, context) {
-  // 设置 CORS 头
-  response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+// ---------- 阿里云 STS 签名 ----------
 
-  if (request.method === 'OPTIONS') {
-    response.setStatusCode(204);
-    return response.send('');
+function percentEncode(str) {
+  return encodeURIComponent(str)
+    .replace(/\+/g, '%20')
+    .replace(/\*/g, '%2A')
+    .replace(/%7E/g, '~');
+}
+
+function signRequest(params, accessKeySecret) {
+  const sortedKeys = Object.keys(params).sort();
+  const canonicalized = sortedKeys
+    .map(k => percentEncode(k) + '=' + percentEncode(params[k]))
+    .join('&');
+  const stringToSign = 'GET&' + percentEncode('/') + '&' + percentEncode(canonicalized);
+  const hmac = crypto.createHmac('sha1', accessKeySecret + '&');
+  hmac.update(stringToSign);
+  return hmac.digest('base64');
+}
+
+function callStsApi(akId, akSecret, roleArn) {
+  return new Promise(function(resolve, reject) {
+    var params = {
+      Action: 'AssumeRole',
+      RoleArn: roleArn,
+      RoleSessionName: 'fairytale-web-upload',
+      DurationSeconds: '3600',
+      Format: 'JSON',
+      Version: '2015-04-01',
+      AccessKeyId: akId,
+      SignatureMethod: 'HMAC-SHA1',
+      Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      SignatureVersion: '1.0',
+      SignatureNonce: crypto.randomBytes(16).toString('hex'),
+    };
+    params.Signature = signRequest(params, akSecret);
+
+    var query = Object.keys(params)
+      .map(function(k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
+      .join('&');
+
+    https.get('https://sts.aliyuncs.com/?' + query, function(res) {
+      var data = '';
+      res.on('data', function(chunk) { data += chunk; });
+      res.on('end', function() {
+        try {
+          var json = JSON.parse(data);
+          if (json.Credentials) {
+            resolve(json);
+          } else {
+            reject(new Error(json.Message || data));
+          }
+        } catch (e) {
+          reject(new Error('Invalid response: ' + data.substring(0, 200)));
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+// ---------- HTTP 服务器 ----------
+
+var PORT = process.env.FC_SERVER_PORT || 9000;
+
+var server = http.createServer(function(req, res) {
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Type', 'application/json');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
   }
+
+  var path = req.url.split('?')[0];
 
   // 健康检查
-  if (request.path === '/health') {
-    response.setHeader('Content-Type', 'application/json');
-    return response.send(Buffer.from(JSON.stringify({ status: 'ok' })));
+  if (path === '/health') {
+    res.writeHead(200);
+    res.end(JSON.stringify({ status: 'ok' }));
+    return;
   }
 
-  // STS Token 接口
-  if (request.path === '/sts-token' || request.path === '/') {
-    try {
-      const result = await stsClient.request('AssumeRole', {
-        RoleArn: process.env.ROLE_ARN,
-        RoleSessionName: 'fairytale-web-upload',
-        DurationSeconds: 3600,
-      }, { method: 'POST' });
+  // STS Token
+  if (path === '/sts-token' || path === '/') {
+    var akId = process.env.ACCESS_KEY_ID;
+    var akSecret = process.env.ACCESS_KEY_SECRET;
+    var roleArn = process.env.ROLE_ARN;
 
-      const cred = result.Credentials;
-      response.setHeader('Content-Type', 'application/json');
-      return response.send(Buffer.from(JSON.stringify({
-        accessKeyId: cred.AccessKeyId,
-        accessKeySecret: cred.AccessKeySecret,
-        stsToken: cred.SecurityToken,
-        expiration: cred.Expiration,
-      })));
-    } catch (err) {
-      console.error('STS error:', err.message);
-      response.setStatusCode(500);
-      response.setHeader('Content-Type', 'application/json');
-      return response.send(Buffer.from(JSON.stringify({ error: 'Failed to get STS token', message: err.message })));
+    if (!akId || !akSecret || !roleArn) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Missing env vars', hint: 'Set ACCESS_KEY_ID, ACCESS_KEY_SECRET, ROLE_ARN' }));
+      return;
     }
+
+    callStsApi(akId, akSecret, roleArn)
+      .then(function(result) {
+        var cred = result.Credentials;
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          accessKeyId: cred.AccessKeyId,
+          accessKeySecret: cred.AccessKeySecret,
+          stsToken: cred.SecurityToken,
+          expiration: cred.Expiration,
+        }));
+      })
+      .catch(function(err) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'STS call failed', message: err.message }));
+      });
+    return;
   }
 
-  response.setStatusCode(404);
-  return response.send(Buffer.from('Not Found'));
-};
+  res.writeHead(404);
+  res.end(JSON.stringify({ error: 'Not Found' }));
+});
 
+server.listen(PORT, function() {
+  console.log('STS server listening on port ' + PORT);
+});
