@@ -1,3 +1,4 @@
 preview-desktop.png
 preview-mobile.png
-config.js
+sts-server/node_modules/
+sts-server/.env

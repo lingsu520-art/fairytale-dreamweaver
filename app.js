@@ -15,20 +15,34 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
-// --- Aliyun OSS Config ---
-// 从外部配置文件读取敏感信息
-const OSS_CONFIG = window.OSS_SECRETS || {
-  region: 'oss-cn-hangzhou',
-  accessKeyId: '', // 在 config.js 中配置
-  accessKeySecret: '', // 在 config.js 中配置
-  bucket: 'fairytale-dreamweaver-images'
-};
+// --- Aliyun OSS via STS ---
+const OSS_BUCKET = 'fairytale-dreamweaver-images';
+const OSS_REGION = 'oss-cn-hangzhou';
+const STS_SERVER = window.STS_SERVER_URL || 'http://localhost:3001';
 
 let ossClient = null;
-function getOSSClient() {
-  if (!ossClient) {
-    ossClient = new OSS(OSS_CONFIG);
+let ossTokenExpireTime = 0;
+
+async function getOSSClient() {
+  const now = Date.now();
+  // 如果 token 还有 2 分钟以上有效期，复用现有 client
+  if (ossClient && ossTokenExpireTime - now > 120000) {
+    return ossClient;
   }
+
+  // 向 STS 服务请求临时凭证
+  const res = await fetch(`${STS_SERVER}/sts-token`);
+  if (!res.ok) throw new Error('获取 STS 凭证失败');
+  const cred = await res.json();
+
+  ossClient = new OSS({
+    region: OSS_REGION,
+    accessKeyId: cred.accessKeyId,
+    accessKeySecret: cred.accessKeySecret,
+    stsToken: cred.stsToken,
+    bucket: OSS_BUCKET,
+  });
+  ossTokenExpireTime = new Date(cred.expiration).getTime();
   return ossClient;
 }
 
@@ -993,11 +1007,10 @@ async function uploadUrlToOSS(imageUrl, index) {
   const buffer = await blob.arrayBuffer();
 
   const filename = `users/${currentUser.uid}/picturebooks/picturebook_${Date.now()}_${index}.png`;
-  const client = getOSSClient();
+  const client = await getOSSClient();
   const result = await client.put(filename, new Blob([buffer], { type: 'image/png' }));
 
-  // 返回公网可访问的 URL
-  return result.url || `https://${OSS_CONFIG.bucket}.${OSS_CONFIG.region}.aliyuncs.com/${filename}`;
+  return result.url || `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${filename}`;
 }
 
 // 将 base64 图片上传到阿里云 OSS
@@ -1014,11 +1027,10 @@ async function uploadBase64ToOSS(b64Data, index) {
   const blob = new Blob([byteArray], { type: 'image/png' });
 
   const filename = `users/${currentUser.uid}/picturebooks/picturebook_${Date.now()}_${index}.png`;
-  const client = getOSSClient();
+  const client = await getOSSClient();
   const result = await client.put(filename, blob);
 
-  // 返回公网可访问的 URL
-  return result.url || `https://${OSS_CONFIG.bucket}.${OSS_CONFIG.region}.aliyuncs.com/${filename}`;
+  return result.url || `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${filename}`;
 }
 
 function showPictureBookProgressModal() {
