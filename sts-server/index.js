@@ -161,6 +161,27 @@ var server = http.createServer(function(req, res) {
     return;
   }
 
+  // 图片下载代理 - 解决浏览器 CORS 无法直接下载 DashScope 图片
+  if (path === '/image/proxy' && req.method === 'POST') {
+    var body = '';
+    req.on('data', function(chunk) { body += chunk; });
+    req.on('end', function() {
+      try {
+        var payload = JSON.parse(body);
+        if (!payload.url) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'Missing url parameter' }));
+          return;
+        }
+        proxyImageDownload(payload.url, res);
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      }
+    });
+    return;
+  }
+
   res.writeHead(404);
   res.end(JSON.stringify({ error: 'Not Found' }));
 });
@@ -237,6 +258,55 @@ function proxyDashScopeTaskQuery(apiKey, taskId, res) {
   proxyReq.on('error', function(err) {
     res.writeHead(500);
     res.end(JSON.stringify({ error: 'Proxy request failed', message: err.message }));
+  });
+
+  proxyReq.end();
+}
+
+// ---------- 图片下载代理 ----------
+
+function proxyImageDownload(imageUrl, res) {
+  var parsedUrl;
+  try {
+    parsedUrl = new URL(imageUrl);
+  } catch (e) {
+    res.writeHead(400);
+    res.end(JSON.stringify({ error: 'Invalid URL' }));
+    return;
+  }
+
+  // 仅允许代理阿里云域名的图片
+  if (!parsedUrl.hostname.endsWith('.aliyuncs.com') && !parsedUrl.hostname.endsWith('.alicdn.com')) {
+    res.writeHead(403);
+    res.end(JSON.stringify({ error: 'Only aliyun image URLs are allowed' }));
+    return;
+  }
+
+  var options = {
+    hostname: parsedUrl.hostname,
+    port: 443,
+    path: parsedUrl.pathname + parsedUrl.search,
+    method: 'GET'
+  };
+
+  var proxyReq = https.request(options, function(proxyRes) {
+    // 以 base64 方式返回图片数据
+    var chunks = [];
+    proxyRes.on('data', function(chunk) { chunks.push(chunk); });
+    proxyRes.on('end', function() {
+      var buffer = Buffer.concat(chunks);
+      var contentType = proxyRes.headers['content-type'] || 'image/png';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        base64: buffer.toString('base64'),
+        contentType: contentType
+      }));
+    });
+  });
+
+  proxyReq.on('error', function(err) {
+    res.writeHead(500);
+    res.end(JSON.stringify({ error: 'Image download failed', message: err.message }));
   });
 
   proxyReq.end();

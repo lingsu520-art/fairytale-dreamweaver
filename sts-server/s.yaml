@@ -17,8 +17,8 @@ resources:
       runtime: nodejs18
       code: ./
       handler: index.handler
-      memorySize: 128
-      timeout: 10
+      memorySize: 256
+      timeout: 60
       environmentVariables:
         ACCESS_KEY_ID: ${env.ACCESS_KEY_ID}
         ACCESS_KEY_SECRET: ${env.ACCESS_KEY_SECRET}

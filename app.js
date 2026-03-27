@@ -963,23 +963,38 @@ async function generateSceneImage(scene, style, index, total) {
   const prompt = `${scene.description}, ${artStyle}, high quality, children's book illustration`;
 
   // 通过后端代理调用 DashScope 文生图异步 API（绕过浏览器 CORS 限制）
-  const submitResponse = await fetch(`${STS_SERVER}/image/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: API_CONFIG.imageModel,
-      prompt: prompt,
-      size: '1024*1024',
-      n: 1
-    })
-  });
+  // 增加重试机制（最多重试 2 次），应对 FC 冷启动超时
+  let submitResponse;
+  let lastError;
+  for (let retry = 0; retry < 3; retry++) {
+    try {
+      submitResponse = await fetch(`${STS_SERVER}/image/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: API_CONFIG.imageModel,
+          prompt: prompt,
+          size: '1024*1024',
+          n: 1
+        })
+      });
+      if (submitResponse.ok) break;
+      lastError = new Error(`HTTP ${submitResponse.status}`);
+      console.warn(`Image generate attempt ${retry + 1} failed: HTTP ${submitResponse.status}`);
+    } catch (e) {
+      lastError = e;
+      console.warn(`Image generate attempt ${retry + 1} error:`, e.message);
+    }
+    // 等待后重试
+    if (retry < 2) await new Promise(r => setTimeout(r, 2000));
+  }
 
-  if (!submitResponse.ok) {
-    const errText = await submitResponse.text().catch(() => '');
-    console.error('Image API submit error:', submitResponse.status, errText);
-    throw new Error(`图片生成提交失败 (${submitResponse.status})`);
+  if (!submitResponse || !submitResponse.ok) {
+    const errText = submitResponse ? await submitResponse.text().catch(() => '') : lastError?.message || '';
+    console.error('Image API submit error after retries:', errText);
+    throw new Error(`图片生成提交失败: ${errText}`);
   }
 
   const submitData = await submitResponse.json();
@@ -1035,18 +1050,34 @@ async function pollImageTask(taskId) {
   throw new Error('图片生成超时');
 }
 
-// 将图片URL下载并上传到阿里云 OSS
+// 将图片URL通过后端代理下载并上传到阿里云 OSS
 async function uploadUrlToOSS(imageUrl, index) {
   if (!currentUser) throw new Error('Not authenticated');
 
-  const response = await fetch(imageUrl);
-  if (!response.ok) throw new Error('Failed to fetch image');
-  const blob = await response.blob();
-  const buffer = await blob.arrayBuffer();
+  // 通过后端代理下载图片（绕过浏览器 CORS 限制）
+  const proxyResponse = await fetch(`${STS_SERVER}/image/proxy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: imageUrl })
+  });
+
+  if (!proxyResponse.ok) throw new Error('Failed to download image via proxy');
+
+  const proxyData = await proxyResponse.json();
+  if (!proxyData.base64) throw new Error('Proxy returned no image data');
+
+  // base64 转 Blob
+  const byteChars = atob(proxyData.base64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNumbers[i] = byteChars.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: proxyData.contentType || 'image/png' });
 
   const filename = `users/${currentUser.uid}/picturebooks/picturebook_${Date.now()}_${index}.png`;
   const client = await getOSSClient();
-  const result = await client.put(filename, new Blob([buffer], { type: 'image/png' }));
+  const result = await client.put(filename, blob);
 
   return result.url || `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${filename}`;
 }
