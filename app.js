@@ -885,19 +885,24 @@ async function generatePictureBook() {
       const progress = 10 + Math.floor((i / scenes.length) * 80);
       updateProgress(progress, `正在生成第 ${i + 1}/${scenes.length} 张绘本...`);
 
-      const imageUrl = await generateSceneImage(
-        scenes[i],
-        pendingStoryData.style,
-        i + 1,
-        scenes.length
-      );
+      try {
+        const imageUrl = await generateSceneImage(
+          scenes[i],
+          pendingStoryData.style,
+          i + 1,
+          scenes.length
+        );
 
-      pictureBook.push({
-        scene: scenes[i].description,
-        caption: scenes[i].caption,
-        imageUrl: imageUrl,
-        order: i + 1
-      });
+        pictureBook.push({
+          scene: scenes[i].description,
+          caption: scenes[i].caption,
+          imageUrl: imageUrl,
+          order: i + 1
+        });
+      } catch (uploadErr) {
+        console.error(`Failed to generate/upload image ${i + 1}:`, uploadErr);
+        throw new Error(`第 ${i + 1} 张图片上传失败: ${uploadErr.message}`);
+      }
     }
 
     updateProgress(100, '绘本生成完成！');
@@ -909,7 +914,7 @@ async function generatePictureBook() {
   } catch (err) {
     console.error('Picture book generation error:', err);
     closePictureBookProgressModal();
-    showToast('绘本生成失败，但故事已保存', 'error');
+    showToast('绘本生成失败: ' + err.message, 'error');
     completeKeepStory(null);
   }
 }
@@ -1007,14 +1012,9 @@ async function generateSceneImage(scene, style, index, total) {
   // 轮询查询任务结果
   const imageUrl = await pollImageTask(taskId);
 
-  // 尝试上传到阿里云 OSS 持久化
-  try {
-    const ossUrl = await uploadUrlToOSS(imageUrl, index);
-    return ossUrl;
-  } catch (e) {
-    console.warn('OSS upload failed, using original URL:', e);
-    return imageUrl;
-  }
+  // 上传到阿里云 OSS 持久化（必须成功，否则临时URL会过期）
+  const ossUrl = await uploadUrlToOSS(imageUrl, index);
+  return ossUrl;
 }
 
 // 通过后端代理轮询 DashScope 异步任务
@@ -1054,6 +1054,8 @@ async function pollImageTask(taskId) {
 async function uploadUrlToOSS(imageUrl, index) {
   if (!currentUser) throw new Error('Not authenticated');
 
+  console.log(`[uploadUrlToOSS] Starting upload for image ${index}`);
+
   // 通过后端代理下载图片（绕过浏览器 CORS 限制）
   const proxyResponse = await fetch(`${STS_SERVER}/image/proxy`, {
     method: 'POST',
@@ -1061,10 +1063,19 @@ async function uploadUrlToOSS(imageUrl, index) {
     body: JSON.stringify({ url: imageUrl })
   });
 
-  if (!proxyResponse.ok) throw new Error('Failed to download image via proxy');
+  if (!proxyResponse.ok) {
+    const errText = await proxyResponse.text().catch(() => 'unknown error');
+    console.error(`[uploadUrlToOSS] Proxy download failed: ${proxyResponse.status}`, errText);
+    throw new Error(`图片下载失败 (${proxyResponse.status})`);
+  }
 
   const proxyData = await proxyResponse.json();
-  if (!proxyData.base64) throw new Error('Proxy returned no image data');
+  if (!proxyData.base64) {
+    console.error('[uploadUrlToOSS] Proxy returned no base64 data');
+    throw new Error('图片数据为空');
+  }
+
+  console.log(`[uploadUrlToOSS] Downloaded image, size: ${Math.round(proxyData.base64.length / 1024)}KB`);
 
   // base64 转 Blob
   const byteChars = atob(proxyData.base64);
@@ -1076,10 +1087,15 @@ async function uploadUrlToOSS(imageUrl, index) {
   const blob = new Blob([byteArray], { type: proxyData.contentType || 'image/png' });
 
   const filename = `users/${currentUser.uid}/picturebooks/picturebook_${Date.now()}_${index}.png`;
+  console.log(`[uploadUrlToOSS] Uploading to OSS: ${filename}`);
+
   const client = await getOSSClient();
   const result = await client.put(filename, blob);
 
-  return result.url || `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${filename}`;
+  const finalUrl = result.url || `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${filename}`;
+  console.log(`[uploadUrlToOSS] Upload successful: ${finalUrl}`);
+
+  return finalUrl;
 }
 
 // 将 base64 图片上传到阿里云 OSS
